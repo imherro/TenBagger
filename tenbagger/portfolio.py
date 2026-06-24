@@ -12,7 +12,7 @@ from tenbagger.config import DEFAULT_DATA_DIR, compact_date, get_setting
 from tenbagger.factor_engine import FactorEngine
 
 
-WeightMode = Literal["equal", "score", "volatility_adjusted"]
+WeightMode = Literal["equal", "score", "volatility_adjusted", "score_convex", "top_heavy"]
 
 
 @dataclass(frozen=True)
@@ -128,11 +128,18 @@ class PortfolioBuilder:
         return merged.dropna(subset=["date", "ts_code"]).sort_values(["date", "ts_code"])
 
     def _rebalance_dates(self, data: pd.DataFrame) -> list[pd.Timestamp]:
-        if self.config.rebalance != "monthly":
-            raise ValueError("Only monthly rebalance is supported in TASK 4.")
         dates = data[["date"]].drop_duplicates().sort_values("date")
-        dates["month"] = dates["date"].dt.to_period("M")
-        return dates.groupby("month")["date"].max().tolist()
+        if self.config.rebalance == "monthly":
+            dates["period"] = dates["date"].dt.to_period("M")
+            return dates.groupby("period")["date"].max().tolist()
+        if self.config.rebalance == "weekly":
+            dates["period"] = dates["date"].dt.to_period("W")
+            return dates.groupby("period")["date"].max().tolist()
+        if self.config.rebalance == "biweekly":
+            dates["period"] = dates["date"].dt.to_period("W")
+            weekly_dates = dates.groupby("period")["date"].max().tolist()
+            return weekly_dates[::2]
+        raise ValueError(f"Unsupported rebalance frequency: {self.config.rebalance}")
 
     def _allocate_weights(self, selected: pd.DataFrame) -> pd.Series:
         if self.config.weight_mode == "equal":
@@ -146,6 +153,13 @@ class PortfolioBuilder:
             volatility = pd.to_numeric(selected.get("volatility_60d", 0.0), errors="coerce").replace({0: pd.NA})
             raw = pd.Series(1.0 / volatility.fillna(volatility.median()).values, index=selected["ts_code"])
             raw = raw * pd.to_numeric(selected["tenbagger_score"], errors="coerce").clip(lower=0.0).values
+        elif self.config.weight_mode == "score_convex":
+            raw = pd.Series(
+                pd.to_numeric(selected["tenbagger_score"], errors="coerce").clip(lower=0.0).values ** 2,
+                index=selected["ts_code"],
+            )
+        elif self.config.weight_mode == "top_heavy":
+            raw = pd.Series(range(len(selected), 0, -1), index=selected["ts_code"], dtype=float)
         else:
             raise ValueError(f"Unsupported weight mode: {self.config.weight_mode}")
 

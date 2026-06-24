@@ -20,6 +20,7 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
     screener_report_path = Path(report_dir) / "task3_screener_summary.json"
     backtest_report_path = Path(report_dir) / "task4_backtest_summary.json"
     optimization_report_path = Path(report_dir) / "task5_optimization_summary.json"
+    monetization_report_path = Path(report_dir) / "task6_monetization_summary.json"
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -55,6 +56,12 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
         status = 200 if report else 404
         return JSONResponse(report or {"error": "TASK 5 report not found"}, status_code=status)
 
+    @app.get("/api/task6")
+    def task6_api() -> JSONResponse:
+        report = _load_report(monetization_report_path)
+        status = 200 if report else 404
+        return JSONResponse(report or {"error": "TASK 6 report not found"}, status_code=status)
+
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
         report = _load_report(report_path)
@@ -62,7 +69,15 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
         screener_report = _load_report(screener_report_path)
         backtest_report = _load_report(backtest_report_path)
         optimization_report = _load_report(optimization_report_path)
-        return _render_dashboard(report, factor_report, screener_report, backtest_report, optimization_report)
+        monetization_report = _load_report(monetization_report_path)
+        return _render_dashboard(
+            report,
+            factor_report,
+            screener_report,
+            backtest_report,
+            optimization_report,
+            monetization_report,
+        )
 
     return app
 
@@ -82,6 +97,7 @@ def _render_dashboard(
     screener_report: dict[str, Any] | None,
     backtest_report: dict[str, Any] | None,
     optimization_report: dict[str, Any] | None,
+    monetization_report: dict[str, Any] | None,
 ) -> str:
     if report is None:
         content = """
@@ -130,6 +146,7 @@ def _render_dashboard(
     screener_section = _render_screener_section(screener_report)
     backtest_section = _render_backtest_section(backtest_report)
     optimization_section = _render_optimization_section(optimization_report)
+    monetization_section = _render_monetization_section(monetization_report)
 
     content = f"""
     <main class="shell">
@@ -159,6 +176,7 @@ def _render_dashboard(
       {screener_section}
       {backtest_section}
       {optimization_section}
+      {monetization_section}
     </main>
     """
     return _page(content)
@@ -368,6 +386,55 @@ def _render_optimization_section(report: dict[str, Any] | None) -> str:
     <section>
       <h2>IC Improvement</h2>
       <table><thead><tr><th>Horizon</th><th>Baseline RankIC</th><th>Optimized RankIC</th><th>Delta</th></tr></thead><tbody>{ic_html}</tbody></table>
+    </section>
+    """
+
+
+def _render_monetization_section(report: dict[str, Any] | None) -> str:
+    if report is None:
+        return """
+        <section>
+          <h2>Alpha Monetization</h2>
+          <table><tbody><tr><td>TASK 6 report not found</td></tr></tbody></table>
+        </section>
+        """
+
+    best = report.get("best_config", {})
+    test = report.get("test_metrics", {})
+    divergence = report.get("ic_pnl_divergence", {})
+    costs = report.get("cost_sensitivity", [])
+    best_html = "\n".join(
+        f"<tr><td>{html.escape(str(key))}</td><td>{html.escape(str(value))}</td></tr>"
+        for key, value in best.items()
+    )
+    test_html = "\n".join(
+        f"<tr><td>{html.escape(str(key))}</td><td>{html.escape(str(test.get(key, '')))}</td></tr>"
+        for key in ["annual_return", "sharpe", "max_drawdown", "turnover_rate"]
+    )
+    cost_html = "\n".join(
+        "<tr><td>{transaction_cost_rate}</td><td>{sharpe}</td><td>{annual_return}</td><td>{turnover_rate}</td></tr>".format(
+            **{key: html.escape(str(row.get(key, ""))) for key in ["transaction_cost_rate", "sharpe", "annual_return", "turnover_rate"]}
+        )
+        for row in costs
+    )
+    return f"""
+    <section>
+      <h2>Alpha Monetization</h2>
+      <p>{html.escape(str(divergence.get("interpretation")))}</p>
+    </section>
+    <section class="grid">
+      <div>
+        <h2>Best Config</h2>
+        <table><thead><tr><th>Setting</th><th>Value</th></tr></thead><tbody>{best_html}</tbody></table>
+      </div>
+      <div>
+        <h2>Test Metrics</h2>
+        <table><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>{test_html}</tbody></table>
+      </div>
+    </section>
+    <section>
+      <h2>Cost Sensitivity</h2>
+      <table><thead><tr><th>Cost</th><th>Sharpe</th><th>Annual</th><th>Turnover</th></tr></thead><tbody>{cost_html}</tbody></table>
     </section>
     """
 

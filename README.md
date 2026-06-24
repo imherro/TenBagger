@@ -10,6 +10,7 @@ Current milestones:
 - TASK 3: hard-filter screener and alpha validation.
 - TASK 4: portfolio simulation backtest.
 - TASK 5: factor neutralization and walk-forward weight optimization.
+- TASK 6: alpha monetization and execution optimization.
 
 ## TASK 1 Scope
 
@@ -106,6 +107,17 @@ python scripts/run_task5.py
 
 TASK 5 writes the optimization report under
 `reports/task5_optimization_summary.json`.
+
+## Run TASK 6
+
+Run TASK 1 through TASK 5 first, then:
+
+```powershell
+python scripts/run_task6.py
+```
+
+TASK 6 writes the monetization report under
+`reports/task6_monetization_summary.json`.
 
 ## Tests
 
