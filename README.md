@@ -3,7 +3,10 @@
 TenBagger is a local A-share research system for building a verifiable
 structural tenbagger screening pipeline.
 
-Current milestone: TASK 1, data layer and stock universe construction.
+Current milestones:
+
+- TASK 1: data layer and stock universe construction.
+- TASK 2: factor engine and cross-sectional structural scores.
 
 ## TASK 1 Scope
 
@@ -53,6 +56,19 @@ Then open:
 ```text
 http://127.0.0.1:8020
 ```
+
+The dashboard reads local TASK 1 and TASK 2 reports when they exist.
+
+## Run TASK 2
+
+Run TASK 1 first, then:
+
+```powershell
+python scripts/run_task2.py
+```
+
+TASK 2 writes factor parquet files under `data/factors/` and the factor report
+under `reports/task2_factor_summary.json`.
 
 ## Tests
 

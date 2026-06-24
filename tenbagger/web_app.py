@@ -16,6 +16,7 @@ from tenbagger.config import DEFAULT_REPORT_DIR
 def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
     app = FastAPI(title="TenBagger")
     report_path = Path(report_dir) / "task1_summary.json"
+    factor_report_path = Path(report_dir) / "task2_factor_summary.json"
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -27,10 +28,17 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
         status = 200 if report else 404
         return JSONResponse(report or {"error": "TASK 1 report not found"}, status_code=status)
 
+    @app.get("/api/task2")
+    def task2_api() -> JSONResponse:
+        report = _load_report(factor_report_path)
+        status = 200 if report else 404
+        return JSONResponse(report or {"error": "TASK 2 report not found"}, status_code=status)
+
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
         report = _load_report(report_path)
-        return _render_dashboard(report)
+        factor_report = _load_report(factor_report_path)
+        return _render_dashboard(report, factor_report)
 
     return app
 
@@ -44,7 +52,7 @@ def _load_report(path: Path) -> dict[str, Any] | None:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _render_dashboard(report: dict[str, Any] | None) -> str:
+def _render_dashboard(report: dict[str, Any] | None, factor_report: dict[str, Any] | None) -> str:
     if report is None:
         content = """
         <main class="shell">
@@ -88,6 +96,8 @@ def _render_dashboard(report: dict[str, Any] | None) -> str:
         for row in snapshot
     )
 
+    factor_section = _render_factor_section(factor_report)
+
     content = f"""
     <main class="shell">
       <header class="topbar">
@@ -112,9 +122,48 @@ def _render_dashboard(report: dict[str, Any] | None) -> str:
         <h2>Latest Snapshot</h2>
         <table><thead><tr><th>Code</th><th>Close</th><th>Revenue</th><th>Net Profit</th><th>ROE</th><th>PE</th><th>PB</th><th>Market Cap</th></tr></thead><tbody>{snapshot_html}</tbody></table>
       </section>
+      {factor_section}
     </main>
     """
     return _page(content)
+
+
+def _render_factor_section(report: dict[str, Any] | None) -> str:
+    if report is None:
+        return """
+        <section>
+          <h2>Factor Engine</h2>
+          <table><tbody><tr><td>TASK 2 report not found</td></tr></tbody></table>
+        </section>
+        """
+
+    validation = report.get("validation", {})
+    top_scores = report.get("latest_top_scores", [])
+    validation_html = "\n".join(
+        f"<tr><td>{html.escape(str(key))}</td><td>{html.escape(str(value))}</td></tr>"
+        for key, value in validation.items()
+    )
+    scores_html = "\n".join(
+        "<tr><td>{ts_code}</td><td>{tenbagger_score}</td><td>{growth_score}</td><td>{quality_score}</td><td>{value_score}</td><td>{risk_score}</td><td>{momentum_score}</td></tr>".format(
+            **{key: html.escape(str(row.get(key, ""))) for key in ["ts_code", "tenbagger_score", "growth_score", "quality_score", "value_score", "risk_score", "momentum_score"]}
+        )
+        for row in top_scores
+    )
+    return f"""
+    <section>
+      <h2>Factor Engine</h2>
+    </section>
+    <section class="grid">
+      <div>
+        <h2>Factor Validation</h2>
+        <table><thead><tr><th>Check</th><th>Value</th></tr></thead><tbody>{validation_html}</tbody></table>
+      </div>
+      <div>
+        <h2>Latest Factor Scores</h2>
+        <table><thead><tr><th>Code</th><th>TenBagger</th><th>Growth</th><th>Quality</th><th>Value</th><th>Risk</th><th>Momentum</th></tr></thead><tbody>{scores_html}</tbody></table>
+      </div>
+    </section>
+    """
 
 
 def _page(content: str) -> str:
