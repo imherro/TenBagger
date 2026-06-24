@@ -51,3 +51,19 @@ def test_factor_validation_detects_no_future_leak_for_aligned_data() -> None:
 
     assert validation.future_leak_rows == 0
     assert validation.nan_cells == 0
+
+
+def test_cross_sectional_rank_direction() -> None:
+    frame = pd.DataFrame(
+        {
+            "date": pd.to_datetime(["2026-01-01", "2026-01-01", "2026-01-01"]),
+            "metric": [1.0, 2.0, 3.0],
+        }
+    )
+    engine = FactorEngine()
+
+    high_is_good = engine._cross_sectional_rank(frame, "metric", higher_is_better=True)
+    low_is_good = engine._cross_sectional_rank(frame, "metric", higher_is_better=False)
+
+    assert high_is_good.iloc[2] == 100.0
+    assert low_is_good.iloc[0] == 100.0

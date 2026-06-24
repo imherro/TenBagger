@@ -7,6 +7,7 @@ Current milestones:
 
 - TASK 1: data layer and stock universe construction.
 - TASK 2: factor engine and cross-sectional structural scores.
+- TASK 3: hard-filter screener and alpha validation.
 
 ## TASK 1 Scope
 
@@ -69,6 +70,17 @@ python scripts/run_task2.py
 
 TASK 2 writes factor parquet files under `data/factors/` and the factor report
 under `reports/task2_factor_summary.json`.
+
+## Run TASK 3
+
+Run TASK 1 and TASK 2 first, then:
+
+```powershell
+python scripts/run_task3.py
+```
+
+TASK 3 writes screener parquet files under `data/screener/` and the screener
+report under `reports/task3_screener_summary.json`.
 
 ## Tests
 

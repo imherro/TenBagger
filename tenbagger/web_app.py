@@ -17,6 +17,7 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
     app = FastAPI(title="TenBagger")
     report_path = Path(report_dir) / "task1_summary.json"
     factor_report_path = Path(report_dir) / "task2_factor_summary.json"
+    screener_report_path = Path(report_dir) / "task3_screener_summary.json"
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -34,11 +35,18 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
         status = 200 if report else 404
         return JSONResponse(report or {"error": "TASK 2 report not found"}, status_code=status)
 
+    @app.get("/api/task3")
+    def task3_api() -> JSONResponse:
+        report = _load_report(screener_report_path)
+        status = 200 if report else 404
+        return JSONResponse(report or {"error": "TASK 3 report not found"}, status_code=status)
+
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
         report = _load_report(report_path)
         factor_report = _load_report(factor_report_path)
-        return _render_dashboard(report, factor_report)
+        screener_report = _load_report(screener_report_path)
+        return _render_dashboard(report, factor_report, screener_report)
 
     return app
 
@@ -52,7 +60,11 @@ def _load_report(path: Path) -> dict[str, Any] | None:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
-def _render_dashboard(report: dict[str, Any] | None, factor_report: dict[str, Any] | None) -> str:
+def _render_dashboard(
+    report: dict[str, Any] | None,
+    factor_report: dict[str, Any] | None,
+    screener_report: dict[str, Any] | None,
+) -> str:
     if report is None:
         content = """
         <main class="shell">
@@ -97,6 +109,7 @@ def _render_dashboard(report: dict[str, Any] | None, factor_report: dict[str, An
     )
 
     factor_section = _render_factor_section(factor_report)
+    screener_section = _render_screener_section(screener_report)
 
     content = f"""
     <main class="shell">
@@ -123,6 +136,7 @@ def _render_dashboard(report: dict[str, Any] | None, factor_report: dict[str, An
         <table><thead><tr><th>Code</th><th>Close</th><th>Revenue</th><th>Net Profit</th><th>ROE</th><th>PE</th><th>PB</th><th>Market Cap</th></tr></thead><tbody>{snapshot_html}</tbody></table>
       </section>
       {factor_section}
+      {screener_section}
     </main>
     """
     return _page(content)
@@ -162,6 +176,60 @@ def _render_factor_section(report: dict[str, Any] | None) -> str:
         <h2>Latest Factor Scores</h2>
         <table><thead><tr><th>Code</th><th>TenBagger</th><th>Growth</th><th>Quality</th><th>Value</th><th>Risk</th><th>Momentum</th></tr></thead><tbody>{scores_html}</tbody></table>
       </div>
+    </section>
+    """
+
+
+def _render_screener_section(report: dict[str, Any] | None) -> str:
+    if report is None:
+        return """
+        <section>
+          <h2>Screener</h2>
+          <table><tbody><tr><td>TASK 3 report not found</td></tr></tbody></table>
+        </section>
+        """
+
+    preview = report.get("backtest_preview", {})
+    decay = report.get("ic_decay_curve", [])
+    candidates = report.get("top_candidates", [])
+    near_misses = report.get("near_misses", [])
+
+    preview_html = "\n".join(
+        f"<tr><td>{html.escape(str(key))}</td><td>{html.escape(str(value))}</td></tr>"
+        for key, value in preview.items()
+    )
+    decay_html = "\n".join(
+        "<tr><td>{horizon_days}</td><td>{ic_mean}</td><td>{rank_ic_mean}</td><td>{observations}</td></tr>".format(
+            **{key: html.escape(str(row.get(key, ""))) for key in ["horizon_days", "ic_mean", "rank_ic_mean", "observations"]}
+        )
+        for row in decay
+    )
+    candidate_rows = candidates or near_misses
+    candidate_title = "Top Candidates" if candidates else "Near Misses"
+    candidate_html = "\n".join(
+        "<tr><td>{ts_code}</td><td>{tenbagger_score}</td><td>{industry}</td><td>{revenue_growth_yoy}</td><td>{roe}</td><td>{debt_ratio}</td><td>{fail_reasons}</td></tr>".format(
+            **{key: html.escape(str(row.get(key, ""))) for key in ["ts_code", "tenbagger_score", "industry", "revenue_growth_yoy", "roe", "debt_ratio", "fail_reasons"]}
+        )
+        for row in candidate_rows
+    )
+    return f"""
+    <section>
+      <h2>Screener</h2>
+      <p>Candidate count: {html.escape(str(report.get("candidate_count")))}</p>
+    </section>
+    <section class="grid">
+      <div>
+        <h2>Backtest Preview</h2>
+        <table><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>{preview_html}</tbody></table>
+      </div>
+      <div>
+        <h2>IC Decay</h2>
+        <table><thead><tr><th>Days</th><th>IC</th><th>RankIC</th><th>Obs</th></tr></thead><tbody>{decay_html}</tbody></table>
+      </div>
+    </section>
+    <section>
+      <h2>{candidate_title}</h2>
+      <table><thead><tr><th>Code</th><th>Score</th><th>Industry</th><th>Growth</th><th>ROE</th><th>Debt</th><th>Fail Reasons</th></tr></thead><tbody>{candidate_html}</tbody></table>
     </section>
     """
 

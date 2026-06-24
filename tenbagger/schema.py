@@ -29,6 +29,7 @@ METADATA_COLUMNS = [
     "ann_date",
     "report_period",
     "operating_cashflow",
+    "debt_ratio",
 ]
 
 NUMERIC_COLUMNS = [
@@ -43,6 +44,7 @@ NUMERIC_COLUMNS = [
     "pb",
     "market_cap",
     "operating_cashflow",
+    "debt_ratio",
 ]
 
 

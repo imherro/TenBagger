@@ -52,9 +52,9 @@ Result:
   "validation": {
     "future_leak_rows": 0,
     "nan_cells": 0,
-    "score_std": 9.358743930327051,
-    "score_min": 32.25,
-    "score_max": 82.0833
+    "score_std": 11.453550213143139,
+    "score_min": 20.1667,
+    "score_max": 84.3333
   }
 }
 ```
@@ -62,11 +62,11 @@ Result:
 Latest top scores:
 
 ```text
-000651.SZ  tenbagger=70.50  growth=100.00 quality=80.00 value=40.00 risk=20.00 momentum=40.00
-000858.SZ  tenbagger=67.58  growth=85.00  quality=53.33 value=75.00 risk=40.00 momentum=100.00
-002594.SZ  tenbagger=67.42  growth=65.00  quality=86.67 value=75.00 risk=70.00 momentum=50.00
-002415.SZ  tenbagger=65.58  growth=85.00  quality=63.33 value=75.00 risk=90.00 momentum=10.00
-600887.SH  tenbagger=57.92  growth=65.00  quality=56.67 value=55.00 risk=50.00 momentum=70.00
+000001.SZ  tenbagger=82.83  growth=85.00  quality=73.33 value=95.00 risk=100.00 momentum=80.00
+300750.SZ  tenbagger=73.33  growth=100.00 quality=76.67 value=20.00 risk=10.00  momentum=90.00
+600000.SH  tenbagger=70.00  growth=75.00  quality=60.00 value=95.00 risk=80.00  momentum=30.00
+600519.SH  tenbagger=65.42  growth=80.00  quality=90.00 value=30.00 risk=50.00  momentum=50.00
+601318.SH  tenbagger=52.75  growth=60.00  quality=40.00 value=80.00 risk=30.00  momentum=20.00
 ```
 
 Test command:
@@ -78,5 +78,5 @@ python -m pytest -q
 Result:
 
 ```text
-4 passed
+7 passed
 ```

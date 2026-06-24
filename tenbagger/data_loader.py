@@ -172,6 +172,7 @@ class TenBaggerDataLoader:
             frame["ann_date"] = pd.NA
             frame["report_period"] = pd.NA
             frame["operating_cashflow"] = pd.NA
+            frame["debt_ratio"] = pd.NA
 
         meta = basics[basics["ts_code"] == ts_code].head(1)
         if not meta.empty:
@@ -205,6 +206,12 @@ class TenBaggerDataLoader:
             end_date=self.end_date,
             fields="ts_code,ann_date,end_date,n_cashflow_act",
         )
+        balance = pro.balancesheet(
+            ts_code=ts_code,
+            start_date=finance_start,
+            end_date=self.end_date,
+            fields="ts_code,ann_date,end_date,total_liab,total_assets",
+        )
 
         income = self._latest_by_period(income).rename(
             columns={"total_revenue": "revenue", "n_income": "net_profit"}
@@ -213,6 +220,12 @@ class TenBaggerDataLoader:
         cashflow = self._latest_by_period(cashflow).rename(
             columns={"n_cashflow_act": "operating_cashflow"}
         )
+        balance = self._latest_by_period(balance)
+        if not balance.empty:
+            balance["debt_ratio"] = pd.to_numeric(
+                balance["total_liab"],
+                errors="coerce",
+            ) / pd.to_numeric(balance["total_assets"], errors="coerce").replace({0: pd.NA})
 
         fund = pd.merge(
             income[["ts_code", "ann_date", "end_date", "revenue", "net_profit"]],
@@ -227,6 +240,16 @@ class TenBaggerDataLoader:
             on=["ts_code", "end_date"],
             how="outer",
             suffixes=("", "_cashflow"),
+        )
+        balance_columns = ["ts_code", "ann_date", "end_date", "debt_ratio"]
+        if balance.empty:
+            balance = pd.DataFrame(columns=balance_columns)
+        fund = pd.merge(
+            fund,
+            balance[balance_columns],
+            on=["ts_code", "end_date"],
+            how="outer",
+            suffixes=("", "_balance"),
         )
 
         if fund.empty:
@@ -250,6 +273,7 @@ class TenBaggerDataLoader:
                 "net_profit",
                 "roe",
                 "operating_cashflow",
+                "debt_ratio",
             ]
         ]
 
@@ -269,6 +293,7 @@ class TenBaggerDataLoader:
             row.get("ann_date_indicator"),
             row.get("ann_date"),
             row.get("ann_date_cashflow"),
+            row.get("ann_date_balance"),
             row.get("end_date"),
         ]
         valid = [str(value) for value in candidates if pd.notna(value)]

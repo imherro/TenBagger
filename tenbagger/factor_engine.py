@@ -58,17 +58,18 @@ class FactorEngine:
         data["date"] = pd.to_datetime(data["date"], errors="coerce")
         data = data.dropna(subset=["ts_code", "date"]).sort_values(["ts_code", "date"])
 
-        for column in ["close", "revenue", "net_profit", "roe", "pe", "pb", "market_cap"]:
+        for column in ["close", "revenue", "net_profit", "roe", "pe", "pb", "market_cap", "debt_ratio"]:
             data[column] = pd.to_numeric(data[column], errors="coerce")
 
         data = self._add_time_series_features(data)
         data = self._add_cross_sectional_scores(data)
         data["tenbagger_score"] = (
-            0.30 * data["growth_score"]
-            + 0.25 * data["industry_score"]
+            0.35 * data["growth_score"]
             + 0.25 * data["quality_score"]
             + 0.15 * data["value_score"]
-            + 0.05 * data["momentum_score"]
+            + 0.10 * data["industry_score"]
+            + 0.10 * data["momentum_score"]
+            + 0.05 * data["risk_score"]
         )
         data["tenbagger_score"] = data["tenbagger_score"].clip(0, 100).round(4)
 
@@ -78,11 +79,20 @@ class FactorEngine:
             "roe_trend_yoy",
             "profit_margin",
             "volatility_60d",
+            "max_drawdown_120d",
+            "momentum_1m",
+            "momentum_3m",
+            "momentum_6m",
             "momentum_120d",
+            "industry",
+            "industry_growth_score",
+            "industry_valuation_score",
+            "industry_flow_score",
             "pe",
             "pb",
             "roe",
             "market_cap",
+            "debt_ratio",
             "ann_date",
             "report_period",
         ]
@@ -102,7 +112,12 @@ class FactorEngine:
                 "roe_trend_yoy": 0.0,
                 "profit_margin": 0.0,
                 "volatility_60d": 0.0,
+                "max_drawdown_120d": 0.0,
+                "momentum_1m": 0.0,
+                "momentum_3m": 0.0,
+                "momentum_6m": 0.0,
                 "momentum_120d": 0.0,
+                "debt_ratio": 0.0,
             }
         )
         return result.sort_values(["date", "tenbagger_score", "ts_code"], ascending=[True, False, True])
@@ -169,10 +184,26 @@ class FactorEngine:
         result = data.copy()
         result["daily_return"] = result.groupby("ts_code")["close"].pct_change()
         result["momentum_120d"] = result.groupby("ts_code")["close"].pct_change(120)
+        result["momentum_1m"] = result.groupby("ts_code")["close"].pct_change(21)
+        result["momentum_3m"] = result.groupby("ts_code")["close"].pct_change(63)
+        result["momentum_6m"] = result.groupby("ts_code")["close"].pct_change(126)
         result["volatility_60d"] = (
             result.groupby("ts_code")["daily_return"]
             .rolling(60, min_periods=20)
             .std()
+            .reset_index(level=0, drop=True)
+        )
+        rolling_peak = (
+            result.groupby("ts_code")["close"]
+            .rolling(120, min_periods=20)
+            .max()
+            .reset_index(level=0, drop=True)
+        )
+        drawdown = result["close"] / rolling_peak - 1
+        result["max_drawdown_120d"] = (
+            drawdown.groupby(result["ts_code"])
+            .rolling(120, min_periods=20)
+            .min()
             .reset_index(level=0, drop=True)
         )
         result["profit_margin"] = result["net_profit"] / result["revenue"].replace({0: pd.NA})
@@ -227,12 +258,17 @@ class FactorEngine:
         result = self.compute_growth_factors(result)
         result = self.compute_quality_factors(result)
         result = self.compute_risk_factors(result)
+        result["momentum_v2_raw"] = (
+            0.2 * result["momentum_1m"].fillna(0.0)
+            + 0.3 * result["momentum_3m"].fillna(0.0)
+            + 0.5 * result["momentum_6m"].fillna(0.0)
+        )
         result["momentum_score"] = self._cross_sectional_rank(
             result,
-            "momentum_120d",
+            "momentum_v2_raw",
             higher_is_better=True,
         )
-        result["industry_score"] = self.neutral_score
+        result = self._add_industry_scores(result)
 
         for column in [
             "value_score",
@@ -245,6 +281,59 @@ class FactorEngine:
             result[column] = result[column].fillna(self.neutral_score).clip(0, 100)
         return result
 
+    def _add_industry_scores(self, data: pd.DataFrame) -> pd.DataFrame:
+        result = data.copy()
+        if "industry" not in result.columns:
+            result["industry_score"] = self.neutral_score
+            return result
+
+        result["industry"] = result["industry"].fillna("unknown").astype(str)
+        grouped = (
+            result.groupby(["date", "industry"], as_index=False)
+            .agg(
+                industry_growth_raw=("revenue_growth_yoy", "mean"),
+                industry_pe_raw=("pe", "mean"),
+                industry_flow_raw=("momentum_6m", "mean"),
+            )
+        )
+        grouped["industry_growth_score"] = self._cross_sectional_rank(
+            grouped,
+            "industry_growth_raw",
+            higher_is_better=True,
+        )
+        grouped["industry_valuation_score"] = self._cross_sectional_rank(
+            grouped,
+            "industry_pe_raw",
+            higher_is_better=False,
+        )
+        grouped["industry_flow_score"] = self._cross_sectional_rank(
+            grouped,
+            "industry_flow_raw",
+            higher_is_better=True,
+        )
+        grouped["industry_score"] = self._blend_scores(
+            [
+                grouped["industry_growth_score"],
+                grouped["industry_valuation_score"],
+                grouped["industry_flow_score"],
+            ]
+        )
+        result = result.merge(
+            grouped[
+                [
+                    "date",
+                    "industry",
+                    "industry_growth_score",
+                    "industry_valuation_score",
+                    "industry_flow_score",
+                    "industry_score",
+                ]
+            ],
+            on=["date", "industry"],
+            how="left",
+        )
+        return result
+
     def _cross_sectional_rank(
         self,
         df: pd.DataFrame,
@@ -252,7 +341,7 @@ class FactorEngine:
         higher_is_better: bool,
     ) -> pd.Series:
         values = pd.to_numeric(df[column], errors="coerce")
-        ranked = values.groupby(df["date"]).rank(pct=True, ascending=not higher_is_better)
+        ranked = values.groupby(df["date"]).rank(pct=True, ascending=higher_is_better)
         return (ranked * 100).fillna(self.neutral_score)
 
     def _blend_scores(self, scores: list[pd.Series]) -> pd.Series:

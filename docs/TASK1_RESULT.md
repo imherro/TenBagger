@@ -14,6 +14,7 @@ TASK 1 implements the TenBagger data layer and stock universe construction.
 - TASK 1 report generation under local `reports/`.
 - FastAPI web dashboard served on port `8020`.
 - Unit tests for schema, parquet storage, and report generation.
+- Extended financial fields for later filters, including `debt_ratio`.
 
 ## Validation Run
 
