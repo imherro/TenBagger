@@ -21,6 +21,7 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
     backtest_report_path = Path(report_dir) / "task4_backtest_summary.json"
     optimization_report_path = Path(report_dir) / "task5_optimization_summary.json"
     monetization_report_path = Path(report_dir) / "task6_monetization_summary.json"
+    structural_report_path = Path(report_dir) / "task7_structural_validation_summary.json"
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -62,6 +63,12 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
         status = 200 if report else 404
         return JSONResponse(report or {"error": "TASK 6 report not found"}, status_code=status)
 
+    @app.get("/api/task7")
+    def task7_api() -> JSONResponse:
+        report = _load_report(structural_report_path)
+        status = 200 if report else 404
+        return JSONResponse(report or {"error": "TASK 7 report not found"}, status_code=status)
+
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
         report = _load_report(report_path)
@@ -70,6 +77,7 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
         backtest_report = _load_report(backtest_report_path)
         optimization_report = _load_report(optimization_report_path)
         monetization_report = _load_report(monetization_report_path)
+        structural_report = _load_report(structural_report_path)
         return _render_dashboard(
             report,
             factor_report,
@@ -77,6 +85,7 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
             backtest_report,
             optimization_report,
             monetization_report,
+            structural_report,
         )
 
     return app
@@ -98,6 +107,7 @@ def _render_dashboard(
     backtest_report: dict[str, Any] | None,
     optimization_report: dict[str, Any] | None,
     monetization_report: dict[str, Any] | None,
+    structural_report: dict[str, Any] | None,
 ) -> str:
     if report is None:
         content = """
@@ -147,6 +157,7 @@ def _render_dashboard(
     backtest_section = _render_backtest_section(backtest_report)
     optimization_section = _render_optimization_section(optimization_report)
     monetization_section = _render_monetization_section(monetization_report)
+    structural_section = _render_structural_section(structural_report)
 
     content = f"""
     <main class="shell">
@@ -177,6 +188,7 @@ def _render_dashboard(
       {backtest_section}
       {optimization_section}
       {monetization_section}
+      {structural_section}
     </main>
     """
     return _page(content)
@@ -435,6 +447,70 @@ def _render_monetization_section(report: dict[str, Any] | None) -> str:
     <section>
       <h2>Cost Sensitivity</h2>
       <table><thead><tr><th>Cost</th><th>Sharpe</th><th>Annual</th><th>Turnover</th></tr></thead><tbody>{cost_html}</tbody></table>
+    </section>
+    """
+
+
+def _render_structural_section(report: dict[str, Any] | None) -> str:
+    if report is None:
+        return """
+        <section>
+          <h2>Structural Validation</h2>
+          <table><tbody><tr><td>TASK 7 report not found</td></tr></tbody></table>
+        </section>
+        """
+
+    criteria = report.get("criteria", {})
+    stability = report.get("stability_report", {})
+    randomization = report.get("randomization_test", {})
+    failure = report.get("failure_mode_diagnosis", {})
+    metrics = report.get("oos_metrics", {})
+    criteria_html = "\n".join(
+        f"<tr><td>{html.escape(str(key))}</td><td>{html.escape(str(value))}</td></tr>"
+        for key, value in criteria.items()
+    )
+    stability_html = "\n".join(
+        f"<tr><td>{html.escape(str(key))}</td><td>{html.escape(str(stability.get(key, '')))}</td></tr>"
+        for key in ["score", "ic_variance", "sharpe_variance", "positive_sharpe_ratio", "decay_slow"]
+    )
+    random_html = "\n".join(
+        "<tr><td>{name}</td><td>{mean}</td><td>{p95}</td><td>{p_value}</td><td>{significant}</td></tr>".format(
+            name=html.escape(str(name)),
+            **{key: html.escape(str(value.get(key, ""))) for key in ["mean", "p95", "p_value", "significant"]},
+        )
+        for name, value in {
+            "label_shuffle": randomization.get("label_shuffle", {}),
+            "feature_permutation": randomization.get("feature_permutation", {}),
+        }.items()
+    )
+    metric_html = "\n".join(
+        f"<tr><td>{html.escape(str(key))}</td><td>{html.escape(str(metrics.get(key, '')))}</td></tr>"
+        for key in ["annual_return", "sharpe", "max_drawdown", "turnover_rate"]
+    )
+    return f"""
+    <section>
+      <h2>Structural Validation</h2>
+      <p>Classification: {html.escape(str(report.get("classification")))} | Primary failure: {html.escape(str(failure.get("primary_failure")))}</p>
+    </section>
+    <section class="grid">
+      <div>
+        <h2>OOS Metrics</h2>
+        <table><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>{metric_html}</tbody></table>
+      </div>
+      <div>
+        <h2>Stability</h2>
+        <table><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>{stability_html}</tbody></table>
+      </div>
+    </section>
+    <section class="grid">
+      <div>
+        <h2>Real Alpha Criteria</h2>
+        <table><thead><tr><th>Criterion</th><th>Value</th></tr></thead><tbody>{criteria_html}</tbody></table>
+      </div>
+      <div>
+        <h2>Randomization</h2>
+        <table><thead><tr><th>Test</th><th>Mean</th><th>P95</th><th>P Value</th><th>Significant</th></tr></thead><tbody>{random_html}</tbody></table>
+      </div>
     </section>
     """
 
