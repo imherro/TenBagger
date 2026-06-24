@@ -9,6 +9,7 @@ Current milestones:
 - TASK 2: factor engine and cross-sectional structural scores.
 - TASK 3: hard-filter screener and alpha validation.
 - TASK 4: portfolio simulation backtest.
+- TASK 5: factor neutralization and walk-forward weight optimization.
 
 ## TASK 1 Scope
 
@@ -94,6 +95,17 @@ python scripts/run_task4.py --top-k 10 --weight-mode score
 TASK 4 writes portfolio NAV, holdings, and factor attribution parquet files
 under `data/backtest/` and the backtest report under
 `reports/task4_backtest_summary.json`.
+
+## Run TASK 5
+
+Run TASK 1 through TASK 4 first, then:
+
+```powershell
+python scripts/run_task5.py
+```
+
+TASK 5 writes the optimization report under
+`reports/task5_optimization_summary.json`.
 
 ## Tests
 

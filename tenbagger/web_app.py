@@ -19,6 +19,7 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
     factor_report_path = Path(report_dir) / "task2_factor_summary.json"
     screener_report_path = Path(report_dir) / "task3_screener_summary.json"
     backtest_report_path = Path(report_dir) / "task4_backtest_summary.json"
+    optimization_report_path = Path(report_dir) / "task5_optimization_summary.json"
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -48,13 +49,20 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
         status = 200 if report else 404
         return JSONResponse(report or {"error": "TASK 4 report not found"}, status_code=status)
 
+    @app.get("/api/task5")
+    def task5_api() -> JSONResponse:
+        report = _load_report(optimization_report_path)
+        status = 200 if report else 404
+        return JSONResponse(report or {"error": "TASK 5 report not found"}, status_code=status)
+
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
         report = _load_report(report_path)
         factor_report = _load_report(factor_report_path)
         screener_report = _load_report(screener_report_path)
         backtest_report = _load_report(backtest_report_path)
-        return _render_dashboard(report, factor_report, screener_report, backtest_report)
+        optimization_report = _load_report(optimization_report_path)
+        return _render_dashboard(report, factor_report, screener_report, backtest_report, optimization_report)
 
     return app
 
@@ -73,6 +81,7 @@ def _render_dashboard(
     factor_report: dict[str, Any] | None,
     screener_report: dict[str, Any] | None,
     backtest_report: dict[str, Any] | None,
+    optimization_report: dict[str, Any] | None,
 ) -> str:
     if report is None:
         content = """
@@ -120,6 +129,7 @@ def _render_dashboard(
     factor_section = _render_factor_section(factor_report)
     screener_section = _render_screener_section(screener_report)
     backtest_section = _render_backtest_section(backtest_report)
+    optimization_section = _render_optimization_section(optimization_report)
 
     content = f"""
     <main class="shell">
@@ -148,6 +158,7 @@ def _render_dashboard(
       {factor_section}
       {screener_section}
       {backtest_section}
+      {optimization_section}
     </main>
     """
     return _page(content)
@@ -303,6 +314,60 @@ def _render_backtest_section(report: dict[str, Any] | None) -> str:
     <section>
       <h2>Latest Holdings</h2>
       <table><thead><tr><th>Code</th><th>Weight</th><th>Rebalance Date</th></tr></thead><tbody>{holding_html}</tbody></table>
+    </section>
+    """
+
+
+def _render_optimization_section(report: dict[str, Any] | None) -> str:
+    if report is None:
+        return """
+        <section>
+          <h2>Factor Optimization</h2>
+          <table><tbody><tr><td>TASK 5 report not found</td></tr></tbody></table>
+        </section>
+        """
+
+    baseline = report.get("baseline_test_metrics", {})
+    optimized = report.get("test_metrics", {})
+    weights = report.get("best_weights", {})
+    ic = report.get("ic_comparison", {})
+    weight_html = "\n".join(
+        f"<tr><td>{html.escape(str(key))}</td><td>{html.escape(str(value))}</td></tr>"
+        for key, value in weights.items()
+    )
+    metrics_html = "\n".join(
+        "<tr><td>{metric}</td><td>{base}</td><td>{opt}</td></tr>".format(
+            metric=html.escape(metric),
+            base=html.escape(str(baseline.get(metric, ""))),
+            opt=html.escape(str(optimized.get(metric, ""))),
+        )
+        for metric in ["annual_return", "sharpe", "max_drawdown", "volatility", "win_rate"]
+    )
+    ic_html = "\n".join(
+        "<tr><td>{key}</td><td>{baseline_rank_ic}</td><td>{optimized_rank_ic}</td><td>{delta}</td></tr>".format(
+            key=html.escape(str(key)),
+            **{field: html.escape(str(value.get(field, ""))) for field in ["baseline_rank_ic", "optimized_rank_ic", "delta"]},
+        )
+        for key, value in ic.items()
+    )
+    return f"""
+    <section>
+      <h2>Factor Optimization</h2>
+      <p>Candidates evaluated: {html.escape(str(report.get("candidates_evaluated")))}</p>
+    </section>
+    <section class="grid">
+      <div>
+        <h2>Best Weights</h2>
+        <table><thead><tr><th>Factor</th><th>Weight</th></tr></thead><tbody>{weight_html}</tbody></table>
+      </div>
+      <div>
+        <h2>Baseline vs Optimized</h2>
+        <table><thead><tr><th>Metric</th><th>Baseline</th><th>Optimized</th></tr></thead><tbody>{metrics_html}</tbody></table>
+      </div>
+    </section>
+    <section>
+      <h2>IC Improvement</h2>
+      <table><thead><tr><th>Horizon</th><th>Baseline RankIC</th><th>Optimized RankIC</th><th>Delta</th></tr></thead><tbody>{ic_html}</tbody></table>
     </section>
     """
 
