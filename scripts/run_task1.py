@@ -1,0 +1,52 @@
+from __future__ import annotations
+
+import argparse
+import json
+import sys
+from pathlib import Path
+
+
+ROOT = Path(__file__).resolve().parents[1]
+if str(ROOT) not in sys.path:
+    sys.path.insert(0, str(ROOT))
+
+from tenbagger.task1 import run_task1
+
+
+def main() -> int:
+    parser = argparse.ArgumentParser(description="Run TenBagger TASK 1 data loader.")
+    parser.add_argument("--limit", type=int, default=10)
+    parser.add_argument("--start-date", default=None)
+    parser.add_argument("--end-date", default=None)
+    parser.add_argument("--ts-code", action="append", dest="ts_codes", default=None)
+    parser.add_argument("--data-dir", default=str(ROOT / "data"))
+    parser.add_argument("--report-dir", default=str(ROOT / "reports"))
+    args = parser.parse_args()
+
+    report = run_task1(
+        ts_codes=args.ts_codes,
+        limit=args.limit,
+        start_date=args.start_date,
+        end_date=args.end_date,
+        data_dir=Path(args.data_dir),
+        report_dir=Path(args.report_dir),
+    )
+    print(
+        json.dumps(
+            {
+                "stock_count": report["stock_count"],
+                "row_count": report["row_count"],
+                "date_range": report["date_range"],
+                "latest_trading_date": report["latest_trading_date"],
+                "missing_rates": report["missing_rates"],
+                "loaded_codes": report["storage"]["loaded_codes"],
+            },
+            ensure_ascii=False,
+            indent=2,
+        )
+    )
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())
