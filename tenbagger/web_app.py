@@ -18,6 +18,7 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
     report_path = Path(report_dir) / "task1_summary.json"
     factor_report_path = Path(report_dir) / "task2_factor_summary.json"
     screener_report_path = Path(report_dir) / "task3_screener_summary.json"
+    backtest_report_path = Path(report_dir) / "task4_backtest_summary.json"
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -41,12 +42,19 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
         status = 200 if report else 404
         return JSONResponse(report or {"error": "TASK 3 report not found"}, status_code=status)
 
+    @app.get("/api/task4")
+    def task4_api() -> JSONResponse:
+        report = _load_report(backtest_report_path)
+        status = 200 if report else 404
+        return JSONResponse(report or {"error": "TASK 4 report not found"}, status_code=status)
+
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
         report = _load_report(report_path)
         factor_report = _load_report(factor_report_path)
         screener_report = _load_report(screener_report_path)
-        return _render_dashboard(report, factor_report, screener_report)
+        backtest_report = _load_report(backtest_report_path)
+        return _render_dashboard(report, factor_report, screener_report, backtest_report)
 
     return app
 
@@ -64,6 +72,7 @@ def _render_dashboard(
     report: dict[str, Any] | None,
     factor_report: dict[str, Any] | None,
     screener_report: dict[str, Any] | None,
+    backtest_report: dict[str, Any] | None,
 ) -> str:
     if report is None:
         content = """
@@ -110,6 +119,7 @@ def _render_dashboard(
 
     factor_section = _render_factor_section(factor_report)
     screener_section = _render_screener_section(screener_report)
+    backtest_section = _render_backtest_section(backtest_report)
 
     content = f"""
     <main class="shell">
@@ -137,6 +147,7 @@ def _render_dashboard(
       </section>
       {factor_section}
       {screener_section}
+      {backtest_section}
     </main>
     """
     return _page(content)
@@ -230,6 +241,68 @@ def _render_screener_section(report: dict[str, Any] | None) -> str:
     <section>
       <h2>{candidate_title}</h2>
       <table><thead><tr><th>Code</th><th>Score</th><th>Industry</th><th>Growth</th><th>ROE</th><th>Debt</th><th>Fail Reasons</th></tr></thead><tbody>{candidate_html}</tbody></table>
+    </section>
+    """
+
+
+def _render_backtest_section(report: dict[str, Any] | None) -> str:
+    if report is None:
+        return """
+        <section>
+          <h2>Portfolio Backtest</h2>
+          <table><tbody><tr><td>TASK 4 report not found</td></tr></tbody></table>
+        </section>
+        """
+
+    metrics = report.get("metrics", {})
+    benchmarks = metrics.get("benchmarks", {})
+    attribution = report.get("factor_attribution", {})
+    holdings = report.get("latest_holdings", [])
+
+    metric_keys = [
+        "annual_return",
+        "sharpe",
+        "max_drawdown",
+        "volatility",
+        "win_rate",
+        "turnover_rate",
+        "total_transaction_cost",
+    ]
+    metrics_html = "\n".join(
+        f"<tr><td>{html.escape(str(key))}</td><td>{html.escape(str(metrics.get(key, '')))}</td></tr>"
+        for key in metric_keys
+    )
+    benchmark_html = "\n".join(
+        "<tr><td>{name}</td><td>{annual_return}</td><td>{excess_return}</td><td>{beta}</td><td>{max_drawdown}</td></tr>".format(
+            name=html.escape(str(name)),
+            **{key: html.escape(str(value.get(key, ""))) for key in ["annual_return", "excess_return", "beta", "max_drawdown"]},
+        )
+        for name, value in benchmarks.items()
+    )
+    holding_html = "\n".join(
+        "<tr><td>{ts_code}</td><td>{weight}</td><td>{rebalance_date}</td></tr>".format(
+            **{key: html.escape(str(row.get(key, ""))) for key in ["ts_code", "weight", "rebalance_date"]}
+        )
+        for row in holdings
+    )
+    return f"""
+    <section>
+      <h2>Portfolio Backtest</h2>
+      <p>Final NAV: {html.escape(str(report.get("final_nav")))} | Dominant factor: {html.escape(str(attribution.get("dominant_factor")))}</p>
+    </section>
+    <section class="grid">
+      <div>
+        <h2>Risk Metrics</h2>
+        <table><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>{metrics_html}</tbody></table>
+      </div>
+      <div>
+        <h2>Benchmarks</h2>
+        <table><thead><tr><th>Name</th><th>Annual</th><th>Excess</th><th>Beta</th><th>Drawdown</th></tr></thead><tbody>{benchmark_html}</tbody></table>
+      </div>
+    </section>
+    <section>
+      <h2>Latest Holdings</h2>
+      <table><thead><tr><th>Code</th><th>Weight</th><th>Rebalance Date</th></tr></thead><tbody>{holding_html}</tbody></table>
     </section>
     """
 

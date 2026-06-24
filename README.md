@@ -8,6 +8,7 @@ Current milestones:
 - TASK 1: data layer and stock universe construction.
 - TASK 2: factor engine and cross-sectional structural scores.
 - TASK 3: hard-filter screener and alpha validation.
+- TASK 4: portfolio simulation backtest.
 
 ## TASK 1 Scope
 
@@ -81,6 +82,18 @@ python scripts/run_task3.py
 
 TASK 3 writes screener parquet files under `data/screener/` and the screener
 report under `reports/task3_screener_summary.json`.
+
+## Run TASK 4
+
+Run TASK 1 through TASK 3 first, then:
+
+```powershell
+python scripts/run_task4.py --top-k 10 --weight-mode score
+```
+
+TASK 4 writes portfolio NAV, holdings, and factor attribution parquet files
+under `data/backtest/` and the backtest report under
+`reports/task4_backtest_summary.json`.
 
 ## Tests
 
