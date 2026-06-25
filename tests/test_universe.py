@@ -6,7 +6,7 @@ import pandas as pd
 import pytest
 
 from tenbagger.config import DEFAULT_UNIVERSE
-from tenbagger.data_loader import TenBaggerDataLoader
+from tenbagger.data_loader import DEFAULT_REQUEST_INTERVAL_SECONDS, TenBaggerDataLoader
 from tenbagger.universe import UniverseManager, filter_frame_to_universe
 from tenbagger.universe.provider import StaticUniverseProvider
 
@@ -63,6 +63,7 @@ def test_config_default_universe_is_not_research_source() -> None:
 def test_data_loader_requires_explicit_universe() -> None:
     loader = TenBaggerDataLoader(token="test-token")
 
+    assert loader.request_interval == DEFAULT_REQUEST_INTERVAL_SECONDS
     assert loader._normalize_universe(["603259.sh", "603259.SH", ""]) == ["603259.SH"]
     with pytest.raises(ValueError, match="explicit non-empty universe"):
         loader._normalize_universe([])
@@ -81,3 +82,4 @@ def test_task1_cli_no_longer_exposes_limit() -> None:
 
     assert ("--" + "limit") not in script
     assert "--universe" in script
+    assert "--request-interval" in script

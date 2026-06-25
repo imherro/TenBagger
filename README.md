@@ -53,6 +53,12 @@ python scripts/run_task1.py --universe dev --start-date 20230101
 
 Generated parquet files are written under `data/parquet/` and reports under
 `reports/`. Both folders are local runtime outputs and are not committed.
+TASK 1 waits between per-stock TuShare request batches. The default interval is
+`0.4` seconds, and can be adjusted with:
+
+```powershell
+python scripts/run_task1.py --universe research --request-interval 0.5
+```
 
 ## Universe Selection
 

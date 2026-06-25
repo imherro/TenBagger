@@ -15,11 +15,16 @@ def run_task1(
     universe_level: str = "dev",
     start_date: str | None = None,
     end_date: str | None = None,
+    request_interval: float | None = None,
     data_dir: Path | str = DEFAULT_DATA_DIR,
     report_dir: Path | str = DEFAULT_REPORT_DIR,
 ) -> dict:
     universe = UniverseManager().resolve(universe_level)
-    loader = TenBaggerDataLoader(start_date=start_date, end_date=end_date)
+    loader = TenBaggerDataLoader(
+        start_date=start_date,
+        end_date=end_date,
+        request_interval=request_interval,
+    )
     load_result = loader.load_all(universe=universe.codes)
 
     storage_result = ParquetStorage(data_dir).write(load_result.frame)
@@ -29,6 +34,7 @@ def run_task1(
         "universe_level": universe.level,
         "universe_count": len(universe.codes),
         "universe_sample": universe.codes[:20],
+        "request_interval_seconds": loader.request_interval,
         "requested_codes": load_result.requested_codes,
         "loaded_codes": load_result.loaded_codes,
         "by_stock_files": storage_result.by_stock_files,

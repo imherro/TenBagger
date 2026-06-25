@@ -13,6 +13,9 @@ from tenbagger.config import compact_date, default_start_date, get_setting
 from tenbagger.schema import STANDARD_COLUMNS, empty_standard_frame, ensure_standard_schema
 
 
+DEFAULT_REQUEST_INTERVAL_SECONDS = 0.4
+
+
 @dataclass(frozen=True)
 class LoadResult:
     frame: pd.DataFrame
@@ -29,12 +32,17 @@ class TenBaggerDataLoader:
         token: str | None = None,
         start_date: str | None = None,
         end_date: str | None = None,
-        request_interval: float = 0.25,
+        request_interval: float | None = None,
     ) -> None:
         self.token = token or get_setting("TUSHARE_TOKEN")
         self.start_date = compact_date(start_date or default_start_date())
         self.end_date = compact_date(end_date)
-        self.request_interval = request_interval
+        configured_interval = (
+            get_setting("TUSHARE_REQUEST_INTERVAL_SECONDS", str(DEFAULT_REQUEST_INTERVAL_SECONDS))
+            if request_interval is None
+            else request_interval
+        )
+        self.request_interval = max(float(configured_interval), 0.0)
 
     def load_tushare(self, universe: Iterable[str]) -> LoadResult:
         """Load daily market, valuation, and financial data from TuShare."""
