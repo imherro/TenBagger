@@ -26,6 +26,11 @@ def run_task7(
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "task": "TASK 7 - Structural Alpha Validation Layer",
         "universe": universe.to_api(),
+        "model_provenance": {
+            "model_version": "v1",
+            "score_column": "tenbagger_score",
+            "note": "Structural validation currently validates the legacy V1 score column.",
+        },
         **asdict(result),
     }
 

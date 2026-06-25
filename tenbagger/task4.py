@@ -59,6 +59,11 @@ def run_task4(
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "task": "TASK 4 - Portfolio Simulation Engine",
         "universe": universe.to_api(),
+        "model_provenance": {
+            "model_version": "v1",
+            "score_column": "tenbagger_score",
+            "note": "Legacy portfolio backtest uses the V1 score column.",
+        },
         "config": {
             "top_k": config.top_k,
             "rebalance": config.rebalance,

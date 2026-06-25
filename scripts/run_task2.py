@@ -33,6 +33,8 @@ def main() -> int:
                 "date_range": report["date_range"],
                 "latest_trading_date": report["latest_trading_date"],
                 "validation": report["validation"],
+                "model_v2_summary": report.get("model_v2_summary", {}),
+                "top_scores_v2": report.get("latest_top_scores_v2", [])[:5],
                 "top_scores": report["latest_top_scores"][:5],
             },
             ensure_ascii=False,

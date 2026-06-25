@@ -26,6 +26,11 @@ def run_task5(
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "task": "TASK 5 - Factor Optimization and Alpha Improvement",
         "universe": universe.to_api(),
+        "model_provenance": {
+            "model_version": "v1_optimized",
+            "score_column": "tenbagger_score",
+            "note": "Optimization rewrites the legacy V1 score from component scores.",
+        },
         "candidates_evaluated": result.candidates_evaluated,
         "best_weights": result.best_weights,
         "train_metrics": result.train_metrics,

@@ -37,6 +37,16 @@ def run_task3(
     filtered = HardFilter().apply_filters(factors, latest_only=True)
     candidates = HardFilter.top_candidates(filtered, limit=20)
     near_misses = HardFilter.near_misses(filtered, limit=20)
+    latest_factors = factors[factors["date"] == factors["date"].max()].copy()
+    v2_ranked = latest_factors.sort_values(
+        ["v2_eligible", "tenbagger_score_v2", "v2_confidence_score"],
+        ascending=[False, False, False],
+    )
+    v2_candidates = v2_ranked[
+        v2_ranked["v2_eligible"] & v2_ranked["v2_confidence_grade"].isin(["A", "B"])
+    ].head(20)
+    if v2_candidates.empty:
+        v2_candidates = v2_ranked.head(20)
 
     screener_dir = data_path / "screener"
     screener_dir.mkdir(parents=True, exist_ok=True)
@@ -47,7 +57,9 @@ def run_task3(
     enriched = alpha.attach_forward_returns(factors, task1_data)
     ic_summary = alpha.ic_summary(enriched)
     ic_decay = alpha.ic_decay_curve(enriched)
+    v2_ic_decay = alpha.ic_decay_curve(enriched, factor="tenbagger_score_v2")
     preview = alpha.backtest_preview(enriched)
+    v2_preview = alpha.backtest_preview(enriched, factor="tenbagger_score_v2")
 
     report = {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
@@ -61,9 +73,50 @@ def run_task3(
         "hard_filter_config": asdict(HardFilter().config),
         "top_candidates": _records(candidates, FACTOR_COLUMNS + ["industry", "revenue_growth_yoy", "roe", "debt_ratio", "max_drawdown_120d"]),
         "near_misses": _records(near_misses, FACTOR_COLUMNS + ["industry", "revenue_growth_yoy", "roe", "debt_ratio", "max_drawdown_120d", "fail_reasons"]),
+        "model_v2_summary": {
+            "candidate_count": int(len(v2_candidates)),
+            "eligible_count": int(latest_factors["v2_eligible"].fillna(False).sum()),
+            "eligible_rate": float(latest_factors["v2_eligible"].fillna(False).mean()) if not latest_factors.empty else 0.0,
+            "grade_distribution": {
+                str(key): int(value)
+                for key, value in latest_factors["v2_confidence_grade"].value_counts().to_dict().items()
+            },
+            "latest_market_regime": str(latest_factors["v2_market_regime"].dropna().iloc[0])
+            if not latest_factors["v2_market_regime"].dropna().empty
+            else "unknown",
+            "latest_volatility_regime": str(latest_factors["v2_volatility_regime"].dropna().iloc[0])
+            if not latest_factors["v2_volatility_regime"].dropna().empty
+            else "unknown",
+        },
+        "v2_top_candidates": _records(
+            v2_candidates,
+            [
+                "ts_code",
+                "date",
+                "tenbagger_score",
+                "tenbagger_score_v2",
+                "v2_confidence_grade",
+                "v2_confidence_score",
+                "v2_eligible",
+                "v2_fail_reasons",
+                "v2_growth_persistence_score",
+                "v2_quality_durability_score",
+                "v2_industry_relative_score",
+                "v2_risk_control_score",
+                "v2_momentum_score",
+                "v2_market_state_score",
+                "v2_weight_profile",
+                "industry",
+                "revenue_growth_yoy",
+                "roe",
+                "debt_ratio",
+            ],
+        ),
         "ic_summary": ic_summary,
         "ic_decay_curve": ic_decay,
+        "v2_ic_decay_curve": v2_ic_decay,
         "backtest_preview": asdict(preview),
+        "v2_backtest_preview": asdict(v2_preview),
     }
 
     (report_path / "task3_screener_summary.json").write_text(
@@ -117,6 +170,33 @@ def _write_markdown(report: dict[str, Any], path: Path) -> None:
 
     lines.extend(["", "## IC Decay", ""])
     for item in report["ic_decay_curve"]:
+        lines.append(
+            "- {horizon_days}d: IC={ic_mean:.4f}, RankIC={rank_ic_mean:.4f}, observations={observations}".format(
+                **item
+            )
+        )
+    lines.extend(["", "## Model V2", ""])
+    summary = report["model_v2_summary"]
+    lines.extend(
+        [
+            f"- V2 candidate count: {summary['candidate_count']}",
+            f"- V2 eligible count: {summary['eligible_count']}",
+            f"- V2 eligible rate: {summary['eligible_rate']:.2%}",
+            f"- Latest market regime: {summary['latest_market_regime']}",
+            f"- Latest volatility regime: {summary['latest_volatility_regime']}",
+            "",
+            "## V2 Top Candidates",
+            "",
+        ]
+    )
+    for row in report["v2_top_candidates"][:10]:
+        lines.append(
+            "- {ts_code}: v2={tenbagger_score_v2:.2f}, grade={v2_confidence_grade}, profile={v2_weight_profile}, v1={tenbagger_score:.2f}".format(
+                **row
+            )
+        )
+    lines.extend(["", "## V2 IC Decay", ""])
+    for item in report["v2_ic_decay_curve"]:
         lines.append(
             "- {horizon_days}d: IC={ic_mean:.4f}, RankIC={rank_ic_mean:.4f}, observations={observations}".format(
                 **item

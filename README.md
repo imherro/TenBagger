@@ -94,6 +94,43 @@ http://127.0.0.1:8020
 
 The dashboard reads local TASK 1 and TASK 2 reports when they exist.
 
+## API Catalog
+
+The local web service exposes a read-only interface catalog:
+
+```text
+GET /api
+```
+
+`/api` returns JSON describing all public routes in the current system. The
+response includes:
+
+- system name, version, description, and `base_url`
+- documentation links: `/docs`, `/redoc`, `/openapi.json`
+- recommended entrypoints
+- safety boundaries
+- grouped endpoints
+- `total_endpoints`
+
+Each endpoint entry includes `method`, `path`, purpose, parameters, return
+content, and whether it is read-only. The catalog itself is documentation only:
+it does not trigger recomputation, local writes, trading, synchronization, or
+external side effects.
+
+Recommended starting points:
+
+- `/api`: endpoint discovery and safety notes.
+- `/`: default Model V2 dashboard.
+- `/api/task3`: Model V2 candidate and validation summary.
+- `/api/task8/regime`: current market regime.
+- `/api/task9/behavior`: current behavioral flow state.
+- `/api/task10/structure`: current market structure state.
+- `/api/task11/anomaly`: current structural anomaly state.
+
+Safety note: most API endpoints read existing local reports only. The catalog
+flags `/api/universe/revaluation` as non-read-only because that endpoint may
+write a local revaluation report.
+
 ## Run TASK 2
 
 Run TASK 1 first, then:
@@ -104,6 +141,11 @@ python scripts/run_task2.py
 
 TASK 2 writes factor parquet files under `data/factors/` and the factor report
 under `reports/task2_factor_summary.json`.
+
+TASK 2 also writes the parallel Model V2 scoring layer. V2 keeps the original
+`tenbagger_score` intact and adds `tenbagger_score_v2`, hard-gate eligibility,
+dynamic weight profile, and A/B/C/D confidence grades. See
+`docs/MODEL_V2_RESULT.md`.
 
 ## Run TASK 3
 

@@ -4,7 +4,7 @@ from datetime import date, timedelta
 
 import pandas as pd
 
-from tenbagger.factor_engine import FACTOR_COLUMNS, FactorEngine
+from tenbagger.factor_engine import FACTOR_COLUMNS, MODEL_V2_COLUMNS, FactorEngine
 
 
 def _sample_task1_frame() -> pd.DataFrame:
@@ -43,6 +43,16 @@ def test_factor_engine_outputs_required_scores_without_nan() -> None:
     assert factors[FACTOR_COLUMNS].isna().sum().sum() == 0
     assert factors["tenbagger_score"].between(0, 100).all()
     assert factors["tenbagger_score"].std(ddof=0) > 0
+
+
+def test_factor_engine_outputs_model_v2_scores_and_confidence() -> None:
+    factors = FactorEngine().compute(_sample_task1_frame())
+
+    assert set(MODEL_V2_COLUMNS).issubset(factors.columns)
+    assert factors["tenbagger_score_v2"].between(0, 100).all()
+    assert factors["v2_confidence_score"].between(0, 100).all()
+    assert set(factors["v2_confidence_grade"].unique()).issubset({"A", "B", "C", "D"})
+    assert factors["v2_fail_reasons"].notna().all()
 
 
 def test_factor_validation_detects_no_future_leak_for_aligned_data() -> None:

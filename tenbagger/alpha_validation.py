@@ -16,6 +16,7 @@ FACTOR_SCORE_COLUMNS = [
     "momentum_score",
     "risk_score",
     "tenbagger_score",
+    "tenbagger_score_v2",
 ]
 
 
@@ -55,7 +56,7 @@ class AlphaValidator:
 
     def ic_summary(self, enriched: pd.DataFrame) -> dict[str, dict[str, float | int]]:
         result: dict[str, dict[str, float | int]] = {}
-        for factor in FACTOR_SCORE_COLUMNS:
+        for factor in [column for column in FACTOR_SCORE_COLUMNS if column in enriched.columns]:
             for horizon in self.horizons:
                 target = f"future_{horizon}d_return"
                 values = self._daily_correlations(enriched, factor, target)
@@ -83,9 +84,9 @@ class AlphaValidator:
             )
         return curve
 
-    def backtest_preview(self, enriched: pd.DataFrame, horizon: int = 21) -> BacktestPreview:
+    def backtest_preview(self, enriched: pd.DataFrame, horizon: int = 21, factor: str = "tenbagger_score") -> BacktestPreview:
         target = f"future_{horizon}d_return"
-        usable = enriched.dropna(subset=["date", "tenbagger_score", target]).copy()
+        usable = enriched.dropna(subset=["date", factor, target]).copy()
         if usable.empty:
             return BacktestPreview(0.0, 0.0, 0.0, 0.0, 0)
 
@@ -95,7 +96,7 @@ class AlphaValidator:
             if len(date_df) < 3:
                 continue
             top_count = max(1, int(len(date_df) * 0.1))
-            ranked = date_df.sort_values("tenbagger_score", ascending=False)
+            ranked = date_df.sort_values(factor, ascending=False)
             rows.append(
                 {
                     "date": date_value,

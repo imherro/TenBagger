@@ -10,12 +10,20 @@ from typing import Any
 from urllib.parse import quote
 
 import pandas as pd
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from tenbagger.config import DEFAULT_REPORT_DIR
 from tenbagger.revaluation import run_universe_revaluation
 from tenbagger.universe import UniverseManager
+
+
+SYSTEM_NAME = "TenBagger"
+SYSTEM_VERSION = "0.2.0"
+SYSTEM_DESCRIPTION = (
+    "Local A-share tenbagger research system with Model V2 scoring, "
+    "market regime, behavior, structure, and anomaly dashboards."
+)
 
 
 def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
@@ -35,6 +43,11 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
     @app.get("/health")
     def health() -> dict[str, str]:
         return {"status": "ok"}
+
+    @app.get("/api")
+    def api_catalog(request: Request) -> JSONResponse:
+        base_url = str(request.base_url).rstrip("/")
+        return JSONResponse(_build_api_catalog(base_url=base_url))
 
     @app.get("/api/task1")
     def task1_api() -> JSONResponse:
@@ -149,6 +162,13 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
 
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
+        return _dashboard_response("v2")
+
+    @app.get("/model/v1", response_class=HTMLResponse)
+    def model_v1() -> str:
+        return _dashboard_response("v1")
+
+    def _dashboard_response(model_version: str) -> str:
         report = _load_report(report_path)
         factor_report = _load_report(factor_report_path)
         screener_report = _load_report(screener_report_path)
@@ -172,6 +192,7 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
             behavior_report,
             structure_report,
             anomaly_report,
+            model_version=model_version,
         )
 
     return app
@@ -186,6 +207,155 @@ def _load_report(path: Path) -> dict[str, Any] | None:
     return json.loads(path.read_text(encoding="utf-8"))
 
 
+def _endpoint(
+    method: str,
+    path: str,
+    purpose: str,
+    parameters: list[dict[str, Any]] | None,
+    returns: str,
+    read_only: bool = True,
+) -> dict[str, Any]:
+    return {
+        "method": method,
+        "path": path,
+        "purpose": purpose,
+        "parameters": parameters or [],
+        "returns": returns,
+        "read_only": read_only,
+    }
+
+
+def _build_api_catalog(base_url: str = "") -> dict[str, Any]:
+    docs = {
+        "swagger_ui": "/docs",
+        "redoc": "/redoc",
+        "openapi": "/openapi.json",
+    }
+    groups = [
+        {
+            "name": "文档入口",
+            "description": "Human-readable pages and generated API documentation.",
+            "endpoints": [
+                _endpoint("GET", "/api", "Unified API catalog for this system.", [], "JSON endpoint catalog and safety notes."),
+                _endpoint("GET", "/", "Default Model V2 web dashboard.", [], "HTML dashboard."),
+                _endpoint("GET", "/model/v1", "Legacy Model V1 web dashboard for comparison.", [], "HTML dashboard."),
+                _endpoint("GET", "/docs", "FastAPI Swagger UI.", [], "Interactive API documentation page."),
+                _endpoint("GET", "/redoc", "FastAPI ReDoc UI.", [], "Alternative API documentation page."),
+                _endpoint("GET", "/openapi.json", "OpenAPI schema.", [], "OpenAPI JSON schema."),
+            ],
+        },
+        {
+            "name": "系统状态",
+            "description": "Service health and local runtime status.",
+            "endpoints": [
+                _endpoint("GET", "/health", "Health check for the local web service.", [], "JSON status object."),
+            ],
+        },
+        {
+            "name": "当前数据",
+            "description": "Current local universe, data coverage, latest snapshots, and factor outputs.",
+            "endpoints": [
+                _endpoint(
+                    "GET",
+                    "/api/universe",
+                    "Resolve the stock universe for a level.",
+                    [
+                        {
+                            "name": "level",
+                            "in": "query",
+                            "required": False,
+                            "default": "dev",
+                            "description": "Universe level: dev, research, or production.",
+                        }
+                    ],
+                    "Universe metadata, selected stock codes, source, and filter stats.",
+                ),
+                _endpoint("GET", "/api/task1", "TASK 1 data layer summary.", [], "Stock count, missing rates, coverage, and latest snapshot."),
+                _endpoint("GET", "/api/task2", "TASK 2 factor engine summary.", [], "Factor validation, latest V1/V2 scores, and Model V2 summary."),
+                _endpoint("GET", "/api/task3", "TASK 3 screener and alpha validation summary.", [], "V1 candidates, V2 candidates, IC curves, and preview backtests."),
+            ],
+        },
+        {
+            "name": "历史数据",
+            "description": "Backtest, optimization, monetization, and structural alpha reports from existing local outputs.",
+            "endpoints": [
+                _endpoint("GET", "/api/task4", "TASK 4 legacy portfolio simulation report.", [], "Portfolio NAV metrics, benchmarks, holdings, and factor attribution."),
+                _endpoint("GET", "/api/task5", "TASK 5 legacy factor optimization report.", [], "Best weights, baseline/optimized metrics, and IC comparison."),
+                _endpoint("GET", "/api/task6", "TASK 6 legacy alpha monetization report.", [], "Best config, test metrics, cost sensitivity, and decay diagnostics."),
+                _endpoint("GET", "/api/task7", "TASK 7 legacy structural alpha validation report.", [], "OOS metrics, stability, randomization, and alpha classification."),
+            ],
+        },
+        {
+            "name": "分析结果",
+            "description": "Market regime, behavior, structure, anomaly, and universe comparison results.",
+            "endpoints": [
+                _endpoint("GET", "/api/task8", "TASK 8 full market regime report.", [], "Regime latest state, validation, history, and source metadata."),
+                _endpoint("GET", "/api/task8/regime", "TASK 8 compact current regime response.", [], "Current trend, volatility, liquidity, and behavior state."),
+                _endpoint("GET", "/api/task9", "TASK 9 full market behavior and flow report.", [], "Behavior latest state, validation, history, and source metadata."),
+                _endpoint("GET", "/api/task9/behavior", "TASK 9 compact behavior response.", [], "Current flow actor, panic/FOMO, crowding, and divergence metrics."),
+                _endpoint("GET", "/api/task10", "TASK 10 full market structure decomposition report.", [], "Structure latest state, validation, history, and source metadata."),
+                _endpoint("GET", "/api/task10/structure", "TASK 10 compact structure response.", [], "Current return decomposition, dispersion, correlation, and shock metrics."),
+                _endpoint("GET", "/api/task11", "TASK 11 full structural anomaly report.", [], "Anomaly latest state, validation, history, and source metadata."),
+                _endpoint("GET", "/api/task11/anomaly", "TASK 11 compact anomaly response.", [], "Current anomaly score, systemic risk, and dominant anomaly type."),
+                _endpoint(
+                    "GET",
+                    "/api/universe/revaluation",
+                    "Compare generated reports between two universe levels.",
+                    [
+                        {
+                            "name": "baseline",
+                            "in": "query",
+                            "required": False,
+                            "default": "dev",
+                            "description": "Baseline universe level.",
+                        },
+                        {
+                            "name": "target",
+                            "in": "query",
+                            "required": False,
+                            "default": "research",
+                            "description": "Target universe level.",
+                        },
+                    ],
+                    "Universe comparison summary; this endpoint may write a revaluation report.",
+                    read_only=False,
+                ),
+            ],
+        },
+    ]
+    endpoint_count = sum(len(group["endpoints"]) for group in groups)
+    return {
+        "system_name": SYSTEM_NAME,
+        "version": SYSTEM_VERSION,
+        "description": SYSTEM_DESCRIPTION,
+        "base_url": base_url,
+        "docs": docs,
+        "recommended_entrypoints": [
+            {"path": "/api", "reason": "Start here for endpoint discovery and safety notes."},
+            {"path": "/", "reason": "Default Model V2 web dashboard."},
+            {"path": "/api/task3", "reason": "Model V2 candidates and IC preview."},
+            {"path": "/api/task8/regime", "reason": "Current market regime snapshot."},
+            {"path": "/api/task9/behavior", "reason": "Current behavior and flow snapshot."},
+            {"path": "/api/task10/structure", "reason": "Current market structure snapshot."},
+            {"path": "/api/task11/anomaly", "reason": "Current structural anomaly snapshot."},
+        ],
+        "safety": {
+            "catalog_read_only": True,
+            "default_boundary": "GET /api 只描述接口，不触发重计算、写入、交易、同步或外部下单。",
+            "trading_boundary": "当前系统没有交易、券商写入或下单 API；Web/API 默认只用于本地研究展示，除非某个接口明确标记为非只读。",
+            "non_read_only_endpoints": [
+                {
+                    "method": "GET",
+                    "path": "/api/universe/revaluation",
+                    "reason": "Runs a comparison over existing reports and may write local revaluation output files.",
+                }
+            ],
+        },
+        "groups": groups,
+        "total_endpoints": endpoint_count,
+    }
+
+
 def _render_dashboard(
     report: dict[str, Any] | None,
     factor_report: dict[str, Any] | None,
@@ -198,26 +368,30 @@ def _render_dashboard(
     behavior_report: dict[str, Any] | None,
     structure_report: dict[str, Any] | None,
     anomaly_report: dict[str, Any] | None,
+    model_version: str = "v2",
 ) -> str:
     if report is None:
+        api_catalog_section = _render_api_catalog_section(_build_api_catalog())
         content = """
         <main class="shell">
           <section class="empty">
             <h1>TenBagger</h1>
             <p>TASK 1 report not found. Run the data loader first.</p>
           </section>
+          {api_catalog_section}
         </main>
-        """
+        """.format(api_catalog_section=api_catalog_section)
         return _page(content)
 
     missing = report.get("missing_rates", {})
     coverage = report.get("stock_coverage", [])
     snapshot = report.get("latest_snapshot", [])
     stock_names = _stock_name_lookup(report)
+    dataset_summary = _dataset_summary(report)
 
     metric_cards = [
-        ("Stocks", report.get("stock_count")),
-        ("Rows", report.get("row_count")),
+        ("Stocks", _format_metric_value(report.get("stock_count"))),
+        ("Rows", _format_metric_value(report.get("row_count"))),
         ("Latest Date", report.get("latest_trading_date")),
         ("Date Range", f"{report.get('date_range', {}).get('start')} to {report.get('date_range', {}).get('end')}"),
     ]
@@ -248,8 +422,8 @@ def _render_dashboard(
         for row in snapshot
     )
 
-    factor_section = _render_factor_section(factor_report, stock_names)
-    screener_section = _render_screener_section(screener_report, stock_names)
+    factor_section = _render_factor_section(factor_report, stock_names, model_version=model_version)
+    screener_section = _render_screener_section(screener_report, stock_names, model_version=model_version)
     backtest_section = _render_backtest_section(backtest_report, stock_names)
     optimization_section = _render_optimization_section(optimization_report)
     monetization_section = _render_monetization_section(monetization_report)
@@ -258,15 +432,29 @@ def _render_dashboard(
     behavior_section = _render_behavior_section(behavior_report)
     structure_section = _render_structure_section(structure_report)
     anomaly_section = _render_anomaly_section(anomaly_report)
+    api_catalog_section = _render_api_catalog_section(_build_api_catalog())
+
+    model_title = "TenBagger Model V2" if model_version == "v2" else "TenBagger Model V1"
+    model_subtitle = "默认模型：Model V2 评分引擎" if model_version == "v2" else "历史模型：Model V1 评分引擎"
+    model_nav = _model_nav(model_version)
+    legacy_model_sections = (
+        f"{backtest_section}{optimization_section}{monetization_section}{structural_section}"
+        if model_version == "v1"
+        else ""
+    )
 
     content = f"""
     <main class="shell">
       <header class="topbar">
         <div>
-          <h1>TenBagger</h1>
-          <p>TASK 1 data layer dashboard</p>
+          <h1>{model_title}</h1>
+          <p>{model_subtitle}</p>
+          {model_nav}
         </div>
-        <div class="stamp">Generated {html.escape(str(report.get("generated_at")))}</div>
+        <div class="topbar-side">
+          <div class="dataset-badge">{dataset_summary}</div>
+          <div class="stamp">Generated {html.escape(str(report.get("generated_at")))}</div>
+        </div>
       </header>
       <section class="metrics">{cards_html}</section>
       <section class="grid">
@@ -274,9 +462,11 @@ def _render_dashboard(
           <h2>Missing Rates</h2>
           <table><thead><tr><th>Column</th><th>Missing</th></tr></thead><tbody>{missing_html}</tbody></table>
         </div>
-        <div>
+        <div class="coverage-card">
           <h2>Stock Coverage</h2>
-          <table><thead><tr><th>Code</th><th>Rows</th><th>Start</th><th>End</th><th>Coverage</th></tr></thead><tbody>{coverage_html}</tbody></table>
+          <div class="table-scroll coverage-scroll">
+            <table><thead><tr><th>Code</th><th>Rows</th><th>Start</th><th>End</th><th>Coverage</th></tr></thead><tbody>{coverage_html}</tbody></table>
+          </div>
         </div>
       </section>
       <section>
@@ -285,33 +475,102 @@ def _render_dashboard(
       </section>
       {factor_section}
       {screener_section}
-      {backtest_section}
-      {optimization_section}
-      {monetization_section}
-      {structural_section}
+      {legacy_model_sections}
       {regime_section}
       {behavior_section}
       {structure_section}
       {anomaly_section}
+      {api_catalog_section}
     </main>
     """
     return _page(content)
 
 
-def _render_factor_section(report: dict[str, Any] | None, stock_names: dict[str, str]) -> str:
+def _render_api_catalog_section(catalog: dict[str, Any]) -> str:
+    entry_html = "\n".join(
+        "<tr><td>{path}</td><td>{reason}</td></tr>".format(
+            path=html.escape(str(item.get("path", ""))),
+            reason=html.escape(str(item.get("reason", ""))),
+        )
+        for item in catalog.get("recommended_entrypoints", [])
+    )
+    group_html = "\n".join(
+        "<tr><td>{name}</td><td>{count}</td><td>{description}</td></tr>".format(
+            name=html.escape(str(group.get("name", ""))),
+            count=html.escape(str(len(group.get("endpoints", [])))),
+            description=html.escape(str(group.get("description", ""))),
+        )
+        for group in catalog.get("groups", [])
+    )
+    safety = catalog.get("safety", {})
+    non_read_only = safety.get("non_read_only_endpoints", [])
+    non_read_only_text = "; ".join(
+        f"{item.get('method')} {item.get('path')}: {item.get('reason')}" for item in non_read_only
+    ) or "None"
+    return f"""
+    <section>
+      <h2>接口说明</h2>
+      <p>Total endpoints: {html.escape(str(catalog.get("total_endpoints")))}</p>
+      <p>Catalog: <a href="/api">GET /api</a> | Docs: <a href="/docs">/docs</a> · <a href="/redoc">/redoc</a> · <a href="/openapi.json">/openapi.json</a></p>
+    </section>
+    <section class="grid">
+      <div>
+        <h2>Recommended Entrypoints</h2>
+        <table><thead><tr><th>Path</th><th>Reason</th></tr></thead><tbody>{entry_html}</tbody></table>
+      </div>
+      <div>
+        <h2>API Groups</h2>
+        <table><thead><tr><th>Group</th><th>Endpoints</th><th>Description</th></tr></thead><tbody>{group_html}</tbody></table>
+      </div>
+    </section>
+    <section>
+      <h2>Safety Boundary</h2>
+      <p>{html.escape(str(safety.get("default_boundary", "")))}</p>
+      <p>{html.escape(str(safety.get("trading_boundary", "")))}</p>
+      <p>Non-read-only: {html.escape(non_read_only_text)}</p>
+    </section>
+    """
+
+
+def _render_factor_section(
+    report: dict[str, Any] | None,
+    stock_names: dict[str, str],
+    model_version: str = "v2",
+) -> str:
     if report is None:
+        title = "Model V2 Factor Engine" if model_version == "v2" else "Model V1 Factor Engine"
         return """
         <section>
-          <h2>Factor Engine</h2>
+          <h2>{title}</h2>
           <table><tbody><tr><td>TASK 2 report not found</td></tr></tbody></table>
         </section>
-        """
+        """.format(title=title)
 
     validation = report.get("validation", {})
     top_scores = report.get("latest_top_scores", [])
+    model_v2 = report.get("model_v2_summary", {})
+    top_scores_v2 = report.get("latest_top_scores_v2", [])
+    score_distribution = report.get("score_distribution", {})
     validation_html = "\n".join(
         f"<tr><td>{html.escape(str(key))}</td><td>{html.escape(str(value))}</td></tr>"
         for key, value in validation.items()
+    )
+    v2_validation = {
+        "future_leak_rows": validation.get("future_leak_rows"),
+        "nan_cells": validation.get("nan_cells"),
+    }
+    v2_score_distribution = score_distribution.get("tenbagger_score_v2", {})
+    if isinstance(v2_score_distribution, dict):
+        v2_validation.update(
+            {
+                "v2_score_std": v2_score_distribution.get("std"),
+                "v2_score_min": v2_score_distribution.get("min"),
+                "v2_score_max": v2_score_distribution.get("max"),
+            }
+        )
+    v2_validation_html = "\n".join(
+        f"<tr><td>{html.escape(str(key))}</td><td>{html.escape(str(value))}</td></tr>"
+        for key, value in v2_validation.items()
     )
     scores_html = "\n".join(
         "<tr><td>{ts_code}</td><td>{tenbagger_score}</td><td>{growth_score}</td><td>{quality_score}</td><td>{value_score}</td><td>{risk_score}</td><td>{momentum_score}</td></tr>".format(
@@ -320,40 +579,94 @@ def _render_factor_section(report: dict[str, Any] | None, stock_names: dict[str,
         )
         for row in top_scores
     )
+    v2_summary_html = "\n".join(
+        f"<tr><td>{html.escape(str(key))}</td><td>{html.escape(str(value))}</td></tr>"
+        for key, value in model_v2.items()
+        if key != "grade_distribution"
+    )
+    v2_scores_html = "\n".join(
+        "<tr><td>{ts_code}</td><td>{tenbagger_score_v2}</td><td>{v2_confidence_grade}</td><td>{v2_eligible}</td><td>{v2_weight_profile}</td></tr>".format(
+            ts_code=_stock_code_link(row.get("ts_code"), _stock_name_for(row, stock_names)),
+            **{
+                key: html.escape(str(row.get(key, "")))
+                for key in [
+                    "tenbagger_score_v2",
+                    "v2_confidence_grade",
+                    "v2_eligible",
+                    "v2_weight_profile",
+                ]
+            },
+        )
+        for row in top_scores_v2
+    )
+    if model_version == "v1":
+        return f"""
+        <section>
+          <h2>Model V1 Factor Engine</h2>
+        </section>
+        <section class="grid">
+          <div>
+            <h2>Factor Validation</h2>
+            <table><thead><tr><th>Check</th><th>Value</th></tr></thead><tbody>{validation_html}</tbody></table>
+          </div>
+          <div>
+            <h2>Latest V1 Factor Scores</h2>
+            <table><thead><tr><th>Code</th><th>TenBagger</th><th>Growth</th><th>Quality</th><th>Value</th><th>Risk</th><th>Momentum</th></tr></thead><tbody>{scores_html}</tbody></table>
+          </div>
+        </section>
+        """
+
     return f"""
     <section>
-      <h2>Factor Engine</h2>
+      <h2>Model V2 Factor Engine</h2>
     </section>
     <section class="grid">
       <div>
-        <h2>Factor Validation</h2>
-        <table><thead><tr><th>Check</th><th>Value</th></tr></thead><tbody>{validation_html}</tbody></table>
+        <h2>Model V2 Validation</h2>
+        <table><thead><tr><th>Check</th><th>Value</th></tr></thead><tbody>{v2_validation_html}</tbody></table>
       </div>
       <div>
-        <h2>Latest Factor Scores</h2>
-        <table><thead><tr><th>Code</th><th>TenBagger</th><th>Growth</th><th>Quality</th><th>Value</th><th>Risk</th><th>Momentum</th></tr></thead><tbody>{scores_html}</tbody></table>
+        <h2>Model V2 Summary</h2>
+        <table><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>{v2_summary_html}</tbody></table>
       </div>
+    </section>
+    <section>
+      <h2>Latest V2 Scores</h2>
+      <table><thead><tr><th>Code</th><th>V2 Score</th><th>Grade</th><th>Eligible</th><th>Profile</th></tr></thead><tbody>{v2_scores_html}</tbody></table>
     </section>
     """
 
 
-def _render_screener_section(report: dict[str, Any] | None, stock_names: dict[str, str]) -> str:
+def _render_screener_section(
+    report: dict[str, Any] | None,
+    stock_names: dict[str, str],
+    model_version: str = "v2",
+) -> str:
     if report is None:
+        title = "Model V2 Screener" if model_version == "v2" else "Model V1 Screener"
         return """
         <section>
-          <h2>Screener</h2>
+          <h2>{title}</h2>
           <table><tbody><tr><td>TASK 3 report not found</td></tr></tbody></table>
         </section>
-        """
+        """.format(title=title)
 
     preview = report.get("backtest_preview", {})
+    v2_preview = report.get("v2_backtest_preview", {})
     decay = report.get("ic_decay_curve", [])
+    v2_decay = report.get("v2_ic_decay_curve", [])
     candidates = report.get("top_candidates", [])
     near_misses = report.get("near_misses", [])
+    v2_candidates = report.get("v2_top_candidates", [])
+    model_v2 = report.get("model_v2_summary", {})
 
     preview_html = "\n".join(
         f"<tr><td>{html.escape(str(key))}</td><td>{html.escape(str(value))}</td></tr>"
         for key, value in preview.items()
+    )
+    v2_preview_html = "\n".join(
+        f"<tr><td>{html.escape(str(key))}</td><td>{html.escape(str(value))}</td></tr>"
+        for key, value in v2_preview.items()
     )
     decay_html = "\n".join(
         "<tr><td>{horizon_days}</td><td>{ic_mean}</td><td>{rank_ic_mean}</td><td>{observations}</td></tr>".format(
@@ -361,8 +674,14 @@ def _render_screener_section(report: dict[str, Any] | None, stock_names: dict[st
         )
         for row in decay
     )
+    v2_decay_html = "\n".join(
+        "<tr><td>{horizon_days}</td><td>{ic_mean}</td><td>{rank_ic_mean}</td><td>{observations}</td></tr>".format(
+            **{key: html.escape(str(row.get(key, ""))) for key in ["horizon_days", "ic_mean", "rank_ic_mean", "observations"]}
+        )
+        for row in v2_decay
+    )
     candidate_rows = candidates or near_misses
-    candidate_title = "Top Candidates" if candidates else "Near Misses"
+    candidate_title = "V1 Top Candidates" if candidates else "V1 Near Misses"
     candidate_html = "\n".join(
         "<tr><td>{ts_code}</td><td>{tenbagger_score}</td><td>{industry}</td><td>{revenue_growth_yoy}</td><td>{roe}</td><td>{debt_ratio}</td><td>{fail_reasons}</td></tr>".format(
             ts_code=_stock_code_link(row.get("ts_code"), _stock_name_for(row, stock_names)),
@@ -370,24 +689,67 @@ def _render_screener_section(report: dict[str, Any] | None, stock_names: dict[st
         )
         for row in candidate_rows
     )
+    v2_summary_bits = " | ".join(
+        f"{html.escape(str(key))}: {html.escape(str(value))}"
+        for key, value in model_v2.items()
+        if key != "grade_distribution"
+    )
+    v2_candidate_html = "\n".join(
+        "<tr><td>{ts_code}</td><td>{tenbagger_score_v2}</td><td>{v2_confidence_grade}</td><td>{v2_weight_profile}</td><td>{industry}</td><td>{v2_fail_reasons}</td></tr>".format(
+            ts_code=_stock_code_link(row.get("ts_code"), _stock_name_for(row, stock_names)),
+            **{
+                key: html.escape(str(row.get(key, "")))
+                for key in [
+                    "tenbagger_score_v2",
+                    "v2_confidence_grade",
+                    "v2_weight_profile",
+                    "industry",
+                    "v2_fail_reasons",
+                ]
+            },
+        )
+        for row in v2_candidates
+    )
+    if model_version == "v1":
+        return f"""
+        <section>
+          <h2>Model V1 Screener</h2>
+          <p>Candidate count: {html.escape(str(report.get("candidate_count")))}</p>
+        </section>
+        <section class="grid">
+          <div>
+            <h2>V1 Backtest Preview</h2>
+            <table><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>{preview_html}</tbody></table>
+          </div>
+          <div>
+            <h2>V1 IC Decay</h2>
+            <table><thead><tr><th>Days</th><th>IC</th><th>RankIC</th><th>Obs</th></tr></thead><tbody>{decay_html}</tbody></table>
+          </div>
+        </section>
+        <section>
+          <h2>{candidate_title}</h2>
+          <table><thead><tr><th>Code</th><th>Score</th><th>Industry</th><th>Growth</th><th>ROE</th><th>Debt</th><th>Fail Reasons</th></tr></thead><tbody>{candidate_html}</tbody></table>
+        </section>
+        """
+
     return f"""
     <section>
-      <h2>Screener</h2>
-      <p>Candidate count: {html.escape(str(report.get("candidate_count")))}</p>
+      <h2>Model V2 Screener</h2>
+      <p>{v2_summary_bits}</p>
     </section>
     <section class="grid">
       <div>
-        <h2>Backtest Preview</h2>
-        <table><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>{preview_html}</tbody></table>
+        <h2>V2 Backtest Preview</h2>
+        <table><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>{v2_preview_html}</tbody></table>
       </div>
       <div>
-        <h2>IC Decay</h2>
-        <table><thead><tr><th>Days</th><th>IC</th><th>RankIC</th><th>Obs</th></tr></thead><tbody>{decay_html}</tbody></table>
+        <h2>V2 IC Decay</h2>
+        <table><thead><tr><th>Days</th><th>IC</th><th>RankIC</th><th>Obs</th></tr></thead><tbody>{v2_decay_html}</tbody></table>
       </div>
     </section>
     <section>
-      <h2>{candidate_title}</h2>
-      <table><thead><tr><th>Code</th><th>Score</th><th>Industry</th><th>Growth</th><th>ROE</th><th>Debt</th><th>Fail Reasons</th></tr></thead><tbody>{candidate_html}</tbody></table>
+      <h2>V2 Candidates</h2>
+      <table><thead><tr><th>Code</th><th>V2 Score</th><th>Grade</th><th>Profile</th><th>Industry</th><th>Fail Reasons</th></tr></thead><tbody>{v2_candidate_html}</tbody></table>
     </section>
     """
 
@@ -405,6 +767,20 @@ def _render_backtest_section(report: dict[str, Any] | None, stock_names: dict[st
     benchmarks = metrics.get("benchmarks", {})
     attribution = report.get("factor_attribution", {})
     holdings = report.get("latest_holdings", [])
+    provenance = _model_provenance_note(report, "v1", "tenbagger_score")
+    date_range = report.get("date_range", {})
+    config = report.get("config", {})
+    backtest_period = f"{date_range.get('start', '')} to {date_range.get('end', '')}"
+    backtest_details = [
+        ("Backtest Period", backtest_period if backtest_period != " to " else ""),
+        ("Rebalance", config.get("rebalance")),
+        ("Rebalances", report.get("rebalance_count")),
+    ]
+    backtest_details_html = " | ".join(
+        f"{html.escape(str(label))}: {html.escape(str(value))}"
+        for label, value in backtest_details
+        if value not in (None, "")
+    )
 
     metric_keys = [
         "annual_return",
@@ -436,6 +812,8 @@ def _render_backtest_section(report: dict[str, Any] | None, stock_names: dict[st
     return f"""
     <section>
       <h2>Portfolio Backtest</h2>
+      <p>{provenance}</p>
+      <p>{backtest_details_html}</p>
       <p>Final NAV: {html.escape(str(report.get("final_nav")))} | Dominant factor: {html.escape(str(attribution.get("dominant_factor")))}</p>
     </section>
     <section class="grid">
@@ -468,6 +846,7 @@ def _render_optimization_section(report: dict[str, Any] | None) -> str:
     optimized = report.get("test_metrics", {})
     weights = report.get("best_weights", {})
     ic = report.get("ic_comparison", {})
+    provenance = _model_provenance_note(report, "v1_optimized", "tenbagger_score")
     weight_html = "\n".join(
         f"<tr><td>{html.escape(str(key))}</td><td>{html.escape(str(value))}</td></tr>"
         for key, value in weights.items()
@@ -490,6 +869,7 @@ def _render_optimization_section(report: dict[str, Any] | None) -> str:
     return f"""
     <section>
       <h2>Factor Optimization</h2>
+      <p>{provenance}</p>
       <p>Candidates evaluated: {html.escape(str(report.get("candidates_evaluated")))}</p>
     </section>
     <section class="grid">
@@ -522,6 +902,7 @@ def _render_monetization_section(report: dict[str, Any] | None) -> str:
     test = report.get("test_metrics", {})
     divergence = report.get("ic_pnl_divergence", {})
     costs = report.get("cost_sensitivity", [])
+    provenance = _model_provenance_note(report, "v1_optimized", "tenbagger_score")
     best_html = "\n".join(
         f"<tr><td>{html.escape(str(key))}</td><td>{html.escape(str(value))}</td></tr>"
         for key, value in best.items()
@@ -539,6 +920,7 @@ def _render_monetization_section(report: dict[str, Any] | None) -> str:
     return f"""
     <section>
       <h2>Alpha Monetization</h2>
+      <p>{provenance}</p>
       <p>{html.escape(str(divergence.get("interpretation")))}</p>
     </section>
     <section class="grid">
@@ -572,6 +954,7 @@ def _render_structural_section(report: dict[str, Any] | None) -> str:
     randomization = report.get("randomization_test", {})
     failure = report.get("failure_mode_diagnosis", {})
     metrics = report.get("oos_metrics", {})
+    provenance = _model_provenance_note(report, "v1", "tenbagger_score")
     criteria_html = "\n".join(
         f"<tr><td>{html.escape(str(key))}</td><td>{html.escape(str(value))}</td></tr>"
         for key, value in criteria.items()
@@ -597,6 +980,7 @@ def _render_structural_section(report: dict[str, Any] | None) -> str:
     return f"""
     <section>
       <h2>Structural Validation</h2>
+      <p>{provenance}</p>
       <p>Classification: {html.escape(str(report.get("classification")))} | Primary failure: {html.escape(str(failure.get("primary_failure")))}</p>
     </section>
     <section class="grid">
@@ -691,7 +1075,8 @@ def _render_regime_section(report: dict[str, Any] | None) -> str:
     </section>
     <section class="metrics">{cards_html}</section>
     <section>
-      <h2>Regime History</h2>
+      <h2>Behavior State History</h2>
+      <p>这里显示近期 behavior_state 的变化，不表示牛市早中晚阶段。</p>
       {regime_strip}
     </section>
     <section class="grid">
@@ -1071,8 +1456,63 @@ def _fmt(value: Any) -> str:
     return str(value)
 
 
+def _format_metric_value(value: Any) -> str:
+    if isinstance(value, int):
+        return f"{value:,}"
+    return str(value)
+
+
+def _dataset_summary(report: dict[str, Any]) -> str:
+    storage = report.get("storage", {})
+    universe = storage.get("universe", {}) if isinstance(storage, dict) else {}
+    level = report.get("universe_level") or universe.get("level") or "unknown"
+    universe_count = report.get("universe_count") or universe.get("stock_count")
+    loaded_count = report.get("stock_count")
+    source = storage.get("source") if isinstance(storage, dict) else None
+    source_text = str(source or "local").upper()
+    return html.escape(f"当前数据集：{level} 股票池 · 目标 {universe_count} 只 · 已加载 {loaded_count} 只 · {source_text}")
+
+
+def _model_nav(model_version: str) -> str:
+    if model_version == "v1":
+        return """
+        <nav class="model-nav" aria-label="Model versions">
+          <a href="/">返回 Model V2</a>
+          <span class="active">Model V1</span>
+        </nav>
+        """
+    return """
+    <nav class="model-nav" aria-label="Model versions">
+      <span class="active">Model V2</span>
+      <a href="/model/v1">查看 Model V1</a>
+    </nav>
+    """
+
+
+def _model_provenance_note(
+    report: dict[str, Any],
+    default_model: str,
+    default_score_column: str,
+) -> str:
+    provenance = report.get("model_provenance", {})
+    if not isinstance(provenance, dict):
+        provenance = {}
+    model = provenance.get("model_version") or default_model
+    score_column = provenance.get("score_column") or default_score_column
+    note = provenance.get("note") or "Legacy model chain."
+    return html.escape(f"Model source: {model} · Score column: {score_column} · {note}")
+
+
 HELP_TEXT = {
     "TenBagger": "十倍股寻找系统：把数据质量、因子打分、筛选、回测和市场结构研究放在一个页面里。",
+    "TenBagger Model V2": "当前默认模型页面：只展示 Model V2 相关评分、验证和候选池。",
+    "TenBagger Model V1": "历史模型页面：用于回看旧版 V1 评分和候选池。",
+    "Model V2": "当前默认模型。V2 加入硬门槛、动态权重、置信等级和市场状态。",
+    "Model V1": "历史模型。保留用于对照，不再作为默认页面。",
+    "Model V2 Factor Engine": "V2 因子引擎：当前默认评分模型。",
+    "Model V1 Factor Engine": "V1 因子引擎：旧版评分模型，仅用于回看和对照。",
+    "Model V2 Screener": "V2 筛选器：只展示 V2 回测预览、V2 IC 和 V2 候选池。",
+    "Model V1 Screener": "V1 筛选器：旧版候选池页面，仅用于对照。",
     "Stocks": "当前数据集中覆盖的股票数量。",
     "Rows": "当前数据集中可用的日线或合并数据行数。",
     "Latest Date": "当前数据更新到的最近交易日。",
@@ -1082,11 +1522,26 @@ HELP_TEXT = {
     "Latest Snapshot": "每只股票最近一个交易日的核心财务和估值快照。",
     "Factor Engine": "因子引擎：把成长、质量、估值、风险、动量等指标合成为十倍股评分。",
     "Factor Validation": "因子校验：检查打分是否存在未来函数、空值或异常分布。",
+    "Model V2 Validation": "V2 专用校验：这里只显示 V2 分数分布和通用数据质量，不混入 V1 分数统计。",
     "Latest Factor Scores": "最近一期因子评分；分数越高，模型认为越符合十倍股特征。",
+    "Latest V1 Factor Scores": "最近一期 V1 因子评分；仅用于旧模型回看。",
+    "Model V2 Summary": "V2 评分引擎摘要：硬门槛、动态权重、置信等级的总体情况。",
+    "Latest V2 Scores": "最近一期 V2 排名；默认页只展示 V2 结果，V1 对照请进入 Model V1 页面。",
+    "V2 Score": "Model V2 综合分；已经考虑硬门槛、市场状态、行业相对排名和风险约束。",
+    "Grade": "V2 置信等级：A 最强，B 可研究，C 观察，D 暂不可靠。",
+    "Eligible": "是否通过 V2 硬门槛。",
+    "Profile": "V2 当前使用的动态权重模式。",
     "Screener": "筛选器：用硬条件和评分选出候选股或接近候选的股票。",
     "Backtest Preview": "筛选结果的快速回测预览，只用于观察方向，不等同于交易建议。",
     "IC Decay": "信息系数衰减；看当前评分对未来不同周期收益排序的解释力。",
+    "V1 Backtest Preview": "V1 排名的快速预览回测；仅用于旧模型对照。",
+    "V1 IC Decay": "V1 分数的信息系数衰减；用于和 V2 对比。",
+    "V2 Backtest Preview": "V2 排名的快速预览回测；用于和 V1 预览对比，不等同于交易建议。",
+    "V2 IC Decay": "V2 分数的信息系数衰减；判断 V2 排名是否比 V1 更有解释力。",
+    "V2 Candidates": "按 V2 分数和置信等级排序的候选研究清单。",
     "Top Candidates": "当前通过筛选条件的候选股。",
+    "V1 Top Candidates": "V1 旧版硬筛选后的候选股。",
+    "V1 Near Misses": "V1 旧版筛选中接近通过但仍未满足条件的股票。",
     "Near Misses": "接近通过但仍有条件未满足的股票。",
     "Portfolio Backtest": "组合回测：按模型规则构建组合后观察历史表现。",
     "Risk Metrics": "风险收益指标，用来评估组合波动、回撤和胜率。",
@@ -1106,7 +1561,7 @@ HELP_TEXT = {
     "Real Alpha Criteria": "判断信号是否可能是真实 alpha 的条件清单。",
     "Randomization": "随机化检验；通过打乱标签或特征验证结果是否只是巧合。",
     "Market Regime Dashboard": "市场状态面板：观察趋势、波动、流动性和行为状态。",
-    "Regime History": "近期市场状态变化的时间条。",
+    "Behavior State History": "近期市场行为状态变化的时间条；不是牛市早中晚阶段。",
     "Current Regime Detail": "当前市场状态的细分指标。",
     "Regime Validation": "市场状态识别是否连续、稳定、不过度跳变的检查。",
     "Trend Strength": "趋势强度；越高表示上涨或下跌方向越清晰。",
@@ -1139,6 +1594,15 @@ HELP_TEXT = {
     "Correlation Breakdown": "相关性断裂概率；偏高时说明市场内部联动关系变化明显。",
     "Flow Shock Events": "资金流冲击事件；观察机构或散户流动是否出现异常。",
     "Anomaly Events": "中高风险异常事件清单。",
+    "接口说明": "当前系统的公开接口目录入口；只做说明，不触发计算、写入或交易。",
+    "Recommended Entrypoints": "建议优先使用的页面和 API 入口。",
+    "API Groups": "按功能分组的公开接口数量。",
+    "Safety Boundary": "接口安全边界，说明哪些接口只读、哪些接口可能写入本地报告。",
+    "Path": "接口路径。",
+    "Reason": "推荐使用该入口的原因。",
+    "Group": "接口分组。",
+    "Endpoints": "该分组下的接口数量。",
+    "Description": "说明文字。",
     "Column": "数据字段名。",
     "Missing": "该字段缺失比例。",
     "Code": "股票代码；后面的 Xueqiu 可打开雪球页面。",
@@ -1509,6 +1973,47 @@ def _page(content: str) -> str:
           gap: 24px;
           margin-bottom: 20px;
         }}
+        .topbar-side {{
+          display: grid;
+          gap: 8px;
+          justify-items: end;
+        }}
+        .model-nav {{
+          display: flex;
+          flex-wrap: wrap;
+          gap: 8px;
+          margin-top: 12px;
+        }}
+        .model-nav a,
+        .model-nav span {{
+          display: inline-flex;
+          align-items: center;
+          min-height: 34px;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: var(--panel);
+          color: var(--ink);
+          padding: 7px 11px;
+          font-size: 13px;
+          font-weight: 700;
+          text-decoration: none;
+        }}
+        .model-nav .active {{
+          border-color: #99f6e4;
+          background: #ccfbf1;
+          color: #115e59;
+        }}
+        .dataset-badge {{
+          display: inline-block;
+          border: 1px solid #99f6e4;
+          border-radius: 8px;
+          background: #ccfbf1;
+          color: #115e59;
+          padding: 8px 10px;
+          font-size: 13px;
+          font-weight: 700;
+          white-space: nowrap;
+        }}
         h1, h2, p {{ margin: 0; }}
         h1 {{ font-size: 30px; line-height: 1.1; }}
         h2 {{ font-size: 18px; margin: 24px 0 10px; }}
@@ -1545,6 +2050,25 @@ def _page(content: str) -> str:
           display: grid;
           grid-template-columns: 0.8fr 1.2fr;
           gap: 18px;
+        }}
+        .table-scroll {{
+          max-width: 100%;
+          overflow: auto;
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          background: var(--panel);
+        }}
+        .table-scroll table {{
+          border: 0;
+          border-radius: 0;
+        }}
+        .coverage-scroll {{
+          max-height: 320px;
+        }}
+        .coverage-scroll thead th {{
+          position: sticky;
+          top: 0;
+          z-index: 1;
         }}
         table {{
           width: 100%;
@@ -1648,6 +2172,8 @@ def _page(content: str) -> str:
         @media (max-width: 860px) {{
           .shell {{ padding: 18px; }}
           .topbar {{ display: block; }}
+          .topbar-side {{ justify-items: start; margin-top: 10px; }}
+          .dataset-badge {{ white-space: normal; }}
           .stamp {{ margin-top: 8px; }}
           .metrics, .grid {{ grid-template-columns: 1fr; }}
           table {{ display: block; overflow-x: auto; }}

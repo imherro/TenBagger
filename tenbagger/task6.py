@@ -35,6 +35,11 @@ def run_task6(
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "task": "TASK 6 - Alpha Monetization Layer",
         "universe": universe.to_api(),
+        "model_provenance": {
+            "model_version": "v1_optimized",
+            "score_column": "tenbagger_score",
+            "note": "Monetization layer consumes optimized legacy V1 component scores.",
+        },
         "input_weights": weights,
         "best_config": result.best_config,
         "train_metrics": result.train_metrics,

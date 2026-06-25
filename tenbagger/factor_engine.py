@@ -25,6 +25,24 @@ FACTOR_COLUMNS = [
     "tenbagger_score",
 ]
 
+MODEL_V2_COLUMNS = [
+    "tenbagger_score_v2",
+    "v2_eligible",
+    "v2_confidence_grade",
+    "v2_confidence_score",
+    "v2_fail_reasons",
+    "v2_growth_persistence_score",
+    "v2_quality_durability_score",
+    "v2_industry_relative_score",
+    "v2_risk_control_score",
+    "v2_momentum_score",
+    "v2_market_state_score",
+    "v2_turnover_penalty",
+    "v2_market_regime",
+    "v2_volatility_regime",
+    "v2_weight_profile",
+]
+
 
 @dataclass(frozen=True)
 class FactorValidation:
@@ -82,12 +100,18 @@ class FactorEngine:
             + 0.05 * data["risk_score"]
         )
         data["tenbagger_score"] = data["tenbagger_score"].clip(0, 100).round(4)
+        data = self._add_model_v2_scores(data)
 
         output_columns = FACTOR_COLUMNS + [
+            *MODEL_V2_COLUMNS,
             "revenue_growth_yoy",
             "net_profit_growth_yoy",
+            "revenue_growth_acceleration",
+            "net_profit_growth_acceleration",
             "roe_trend_yoy",
             "profit_margin",
+            "profit_margin_trend_120d",
+            "history_days_126",
             "volatility_60d",
             "max_drawdown_120d",
             "momentum_1m",
@@ -113,14 +137,22 @@ class FactorEngine:
         result = data[output_columns].copy()
         result["date"] = result["date"].dt.strftime("%Y-%m-%d")
 
-        score_columns = [column for column in FACTOR_COLUMNS if column.endswith("_score")]
+        score_columns = [
+            column
+            for column in FACTOR_COLUMNS + MODEL_V2_COLUMNS
+            if column.endswith("_score") or column == "tenbagger_score_v2"
+        ]
         result[score_columns] = result[score_columns].fillna(self.neutral_score).clip(0, 100).round(4)
         result = result.fillna(
             {
                 "revenue_growth_yoy": 0.0,
                 "net_profit_growth_yoy": 0.0,
+                "revenue_growth_acceleration": 0.0,
+                "net_profit_growth_acceleration": 0.0,
                 "roe_trend_yoy": 0.0,
                 "profit_margin": 0.0,
+                "profit_margin_trend_120d": 0.0,
+                "history_days_126": 0.0,
                 "volatility_60d": 0.0,
                 "max_drawdown_120d": 0.0,
                 "momentum_1m": 0.0,
@@ -128,12 +160,21 @@ class FactorEngine:
                 "momentum_6m": 0.0,
                 "momentum_120d": 0.0,
                 "debt_ratio": 0.0,
+                "v2_confidence_grade": "D",
+                "v2_fail_reasons": "",
+                "v2_market_regime": "unknown",
+                "v2_volatility_regime": "unknown",
+                "v2_weight_profile": "balanced",
             }
         )
         return result.sort_values(["date", "tenbagger_score", "ts_code"], ascending=[True, False, True])
 
     def validate(self, factors: pd.DataFrame) -> FactorValidation:
-        score_columns = [column for column in FACTOR_COLUMNS if column.endswith("_score")]
+        score_columns = [
+            column
+            for column in FACTOR_COLUMNS + MODEL_V2_COLUMNS
+            if (column.endswith("_score") or column == "tenbagger_score_v2") and column in factors.columns
+        ]
         future_leak_rows = 0
         if {"date", "ann_date"}.issubset(factors.columns):
             dates = pd.to_datetime(factors["date"], errors="coerce")
@@ -197,6 +238,12 @@ class FactorEngine:
         result["momentum_1m"] = result.groupby("ts_code")["close"].pct_change(21)
         result["momentum_3m"] = result.groupby("ts_code")["close"].pct_change(63)
         result["momentum_6m"] = result.groupby("ts_code")["close"].pct_change(126)
+        result["history_days_126"] = (
+            result.groupby("ts_code")["close"]
+            .rolling(126, min_periods=1)
+            .count()
+            .reset_index(level=0, drop=True)
+        )
         result["volatility_60d"] = (
             result.groupby("ts_code")["daily_return"]
             .rolling(60, min_periods=20)
@@ -219,6 +266,9 @@ class FactorEngine:
         result["profit_margin"] = result["net_profit"] / result["revenue"].replace({0: pd.NA})
 
         result = self._attach_fundamental_growth(result)
+        result["revenue_growth_acceleration"] = result.groupby("ts_code")["revenue_growth_yoy"].diff(120)
+        result["net_profit_growth_acceleration"] = result.groupby("ts_code")["net_profit_growth_yoy"].diff(120)
+        result["profit_margin_trend_120d"] = result.groupby("ts_code")["profit_margin"].diff(120)
         return result
 
     def _attach_fundamental_growth(self, data: pd.DataFrame) -> pd.DataFrame:
@@ -344,6 +394,203 @@ class FactorEngine:
         )
         return result
 
+    def _add_model_v2_scores(self, data: pd.DataFrame) -> pd.DataFrame:
+        result = data.copy()
+        result = self._add_market_state(result)
+        result = self._add_model_v2_components(result)
+        result = self._add_model_v2_gates(result)
+        result = self._add_model_v2_dynamic_score(result)
+        result = self._add_model_v2_confidence(result)
+        return result
+
+    def _add_market_state(self, data: pd.DataFrame) -> pd.DataFrame:
+        result = data.copy()
+        market = (
+            result.groupby("date", as_index=False)
+            .agg(market_return=("daily_return", "mean"), market_volatility=("daily_return", "std"))
+            .sort_values("date")
+        )
+        market["market_nav"] = (1 + market["market_return"].fillna(0.0)).cumprod()
+        market["market_return_60d"] = market["market_nav"].pct_change(60)
+        market["market_volatility_60d"] = market["market_return"].rolling(60, min_periods=20).std()
+        volatility_p75 = market["market_volatility_60d"].quantile(0.75)
+        market["v2_market_regime"] = "sideways"
+        market.loc[market["market_return_60d"] > 0.05, "v2_market_regime"] = "bull"
+        market.loc[market["market_return_60d"] < -0.05, "v2_market_regime"] = "bear"
+        market["v2_volatility_regime"] = "normal"
+        market.loc[market["market_volatility_60d"] > volatility_p75, "v2_volatility_regime"] = "high"
+        market["v2_market_state_score"] = 50.0
+        market.loc[market["v2_market_regime"] == "bull", "v2_market_state_score"] = 65.0
+        market.loc[market["v2_market_regime"] == "bear", "v2_market_state_score"] = 35.0
+        market.loc[market["v2_volatility_regime"] == "high", "v2_market_state_score"] -= 10.0
+        return result.merge(
+            market[["date", "v2_market_regime", "v2_volatility_regime", "v2_market_state_score"]],
+            on="date",
+            how="left",
+        )
+
+    def _add_model_v2_components(self, data: pd.DataFrame) -> pd.DataFrame:
+        result = data.copy()
+        result["v2_growth_persistence_score"] = self._blend_scores(
+            [
+                self._cross_sectional_rank(result, "revenue_growth_yoy", higher_is_better=True),
+                self._cross_sectional_rank(result, "net_profit_growth_yoy", higher_is_better=True),
+                self._cross_sectional_rank(result, "revenue_growth_acceleration", higher_is_better=True),
+                self._cross_sectional_rank(result, "net_profit_growth_acceleration", higher_is_better=True),
+            ]
+        )
+        result["v2_quality_durability_score"] = self._blend_scores(
+            [
+                self._cross_sectional_rank(result, "roe", higher_is_better=True),
+                self._cross_sectional_rank(result, "roe_trend_yoy", higher_is_better=True),
+                self._cross_sectional_rank(result, "profit_margin", higher_is_better=True),
+                self._cross_sectional_rank(result, "profit_margin_trend_120d", higher_is_better=True),
+                self._cross_sectional_rank(result, "debt_ratio", higher_is_better=False),
+            ]
+        )
+        result["v2_risk_control_score"] = self._blend_scores(
+            [
+                result["risk_score"],
+                self._cross_sectional_rank(result, "max_drawdown_120d", higher_is_better=True),
+                self._cross_sectional_rank(result, "debt_ratio", higher_is_better=False),
+                self._cross_sectional_rank(result, "volatility_60d", higher_is_better=False),
+            ]
+        )
+        result["v2_momentum_score"] = self._blend_scores(
+            [
+                result["momentum_score"],
+                self._cross_sectional_rank(result, "momentum_3m", higher_is_better=True),
+                self._cross_sectional_rank(result, "momentum_6m", higher_is_better=True),
+            ]
+        )
+        result["v2_industry_relative_score"] = self._industry_relative_score(result)
+        return result
+
+    def _industry_relative_score(self, data: pd.DataFrame) -> pd.Series:
+        industry = data.get("industry", pd.Series("unknown", index=data.index)).fillna("unknown").astype(str)
+        groups = [data["date"], industry]
+        peer_count = data.groupby(groups)["ts_code"].transform("nunique")
+        revenue_rank = self._group_rank(data, groups, "revenue_growth_yoy", higher_is_better=True)
+        quality_rank = self._group_rank(data, groups, "roe", higher_is_better=True)
+        value_rank = self._group_rank(data, groups, "pe", higher_is_better=False)
+        relative = self._blend_scores([revenue_rank, quality_rank, value_rank])
+        relative = relative.where(peer_count >= 3, self.neutral_score)
+        return self._blend_scores([data["industry_score"], relative])
+
+    def _add_model_v2_gates(self, data: pd.DataFrame) -> pd.DataFrame:
+        result = data.copy()
+        industry = result.get("industry", pd.Series("", index=result.index)).fillna("").astype(str)
+        checks = {
+            "history": pd.to_numeric(result["history_days_126"], errors="coerce").fillna(0) >= 80,
+            "revenue_growth": pd.to_numeric(result["revenue_growth_yoy"], errors="coerce").fillna(-1.0) > 0.05,
+            "roe": pd.to_numeric(result["roe"], errors="coerce").fillna(-100.0) > 5.0,
+            "debt": pd.to_numeric(result["debt_ratio"], errors="coerce").fillna(1.0) < 0.70,
+            "drawdown": pd.to_numeric(result["max_drawdown_120d"], errors="coerce").fillna(-1.0) > -0.70,
+            "data_quality": result[["revenue", "net_profit", "roe"]].notna().all(axis=1),
+            "industry": ~industry.isin(("银行", "地产", "全国地产", "区域地产", "保险")),
+        }
+        gate_frame = pd.DataFrame(checks, index=result.index)
+        result["v2_eligible"] = gate_frame.all(axis=1)
+        result["v2_fail_reasons"] = gate_frame.apply(
+            lambda row: ",".join(name for name, passed in row.items() if not bool(passed)),
+            axis=1,
+        )
+        return result
+
+    def _add_model_v2_dynamic_score(self, data: pd.DataFrame) -> pd.DataFrame:
+        result = data.copy()
+        profiles = {
+            "balanced": {
+                "growth": 0.25,
+                "quality": 0.25,
+                "industry": 0.15,
+                "momentum": 0.10,
+                "risk": 0.20,
+                "market": 0.05,
+            },
+            "growth": {
+                "growth": 0.30,
+                "quality": 0.20,
+                "industry": 0.15,
+                "momentum": 0.20,
+                "risk": 0.10,
+                "market": 0.05,
+            },
+            "defensive": {
+                "growth": 0.15,
+                "quality": 0.30,
+                "industry": 0.10,
+                "momentum": 0.05,
+                "risk": 0.35,
+                "market": 0.05,
+            },
+            "transition": {
+                "growth": 0.22,
+                "quality": 0.28,
+                "industry": 0.15,
+                "momentum": 0.08,
+                "risk": 0.22,
+                "market": 0.05,
+            },
+        }
+        result["v2_weight_profile"] = "balanced"
+        result.loc[result["v2_market_regime"] == "bear", "v2_weight_profile"] = "defensive"
+        result.loc[
+            (result["v2_market_regime"] == "bull") & (result["v2_volatility_regime"] != "high"),
+            "v2_weight_profile",
+        ] = "growth"
+        result.loc[
+            (result["v2_market_regime"] == "bull") & (result["v2_volatility_regime"] == "high"),
+            "v2_weight_profile",
+        ] = "transition"
+
+        result["v2_turnover_penalty"] = (
+            ((pd.to_numeric(result["momentum_score"], errors="coerce").fillna(50.0) - 85.0).clip(lower=0) * 0.10)
+            + ((100.0 - pd.to_numeric(result["risk_score"], errors="coerce").fillna(50.0) - 70.0).clip(lower=0) * 0.10)
+        ).clip(0, 8)
+        raw = pd.Series(0.0, index=result.index)
+        for profile, weights in profiles.items():
+            mask = result["v2_weight_profile"] == profile
+            score = (
+                weights["growth"] * result["v2_growth_persistence_score"]
+                + weights["quality"] * result["v2_quality_durability_score"]
+                + weights["industry"] * result["v2_industry_relative_score"]
+                + weights["momentum"] * result["v2_momentum_score"]
+                + weights["risk"] * result["v2_risk_control_score"]
+                + weights["market"] * result["v2_market_state_score"]
+                - result["v2_turnover_penalty"]
+            )
+            raw.loc[mask] = score.loc[mask]
+        result["tenbagger_score_v2"] = raw.clip(0, 100)
+        result.loc[~result["v2_eligible"], "tenbagger_score_v2"] = result.loc[
+            ~result["v2_eligible"],
+            "tenbagger_score_v2",
+        ].clip(upper=58.0)
+        result["tenbagger_score_v2"] = result["tenbagger_score_v2"].round(4)
+        return result
+
+    def _add_model_v2_confidence(self, data: pd.DataFrame) -> pd.DataFrame:
+        result = data.copy()
+        score = pd.to_numeric(result["tenbagger_score_v2"], errors="coerce").fillna(0.0)
+        quality = pd.to_numeric(result["v2_quality_durability_score"], errors="coerce").fillna(0.0)
+        risk = pd.to_numeric(result["v2_risk_control_score"], errors="coerce").fillna(0.0)
+        industry = pd.to_numeric(result["v2_industry_relative_score"], errors="coerce").fillna(0.0)
+        result["v2_confidence_score"] = (
+            0.70 * score + 0.10 * quality + 0.10 * risk + 0.10 * industry
+        ).clip(0, 100).round(4)
+        result["v2_confidence_grade"] = "D"
+        result.loc[result["v2_confidence_score"] >= 58, "v2_confidence_grade"] = "C"
+        result.loc[result["v2_eligible"] & (result["v2_confidence_score"] >= 68), "v2_confidence_grade"] = "B"
+        result.loc[
+            result["v2_eligible"]
+            & (result["v2_confidence_score"] >= 78)
+            & (quality >= 65)
+            & (risk >= 55)
+            & (industry >= 55),
+            "v2_confidence_grade",
+        ] = "A"
+        return result
+
     def _cross_sectional_rank(
         self,
         df: pd.DataFrame,
@@ -352,6 +599,17 @@ class FactorEngine:
     ) -> pd.Series:
         values = pd.to_numeric(df[column], errors="coerce")
         ranked = values.groupby(df["date"]).rank(pct=True, ascending=higher_is_better)
+        return (ranked * 100).fillna(self.neutral_score)
+
+    def _group_rank(
+        self,
+        df: pd.DataFrame,
+        groups: list[pd.Series],
+        column: str,
+        higher_is_better: bool,
+    ) -> pd.Series:
+        values = pd.to_numeric(df[column], errors="coerce")
+        ranked = values.groupby(groups).rank(pct=True, ascending=higher_is_better)
         return (ranked * 100).fillna(self.neutral_score)
 
     def _blend_scores(self, scores: list[pd.Series]) -> pd.Series:

@@ -16,9 +16,17 @@ def main() -> int:
     parser = argparse.ArgumentParser(description="Serve the TenBagger web dashboard.")
     parser.add_argument("--host", default="127.0.0.1")
     parser.add_argument("--port", type=int, default=8020)
+    parser.add_argument("--report-dir", default=str(ROOT / "reports"))
     args = parser.parse_args()
 
-    uvicorn.run("tenbagger.web_app:app", host=args.host, port=args.port, reload=False)
+    from tenbagger.web_app import create_app
+
+    uvicorn.run(
+        create_app(report_dir=Path(args.report_dir)),
+        host=args.host,
+        port=args.port,
+        reload=False,
+    )
     return 0
 
 
