@@ -9,7 +9,7 @@ from typing import Iterable
 
 import pandas as pd
 
-from tenbagger.config import DEFAULT_UNIVERSE, compact_date, default_start_date, get_setting
+from tenbagger.config import compact_date, default_start_date, get_setting
 from tenbagger.schema import STANDARD_COLUMNS, empty_standard_frame, ensure_standard_schema
 
 
@@ -36,11 +36,7 @@ class TenBaggerDataLoader:
         self.end_date = compact_date(end_date)
         self.request_interval = request_interval
 
-    def load_tushare(
-        self,
-        ts_codes: Iterable[str] | None = None,
-        limit: int = 10,
-    ) -> LoadResult:
+    def load_tushare(self, universe: Iterable[str]) -> LoadResult:
         """Load daily market, valuation, and financial data from TuShare."""
 
         if not self.token:
@@ -52,7 +48,7 @@ class TenBaggerDataLoader:
         pro = ts.pro_api()
 
         basics = self._stock_basic(pro)
-        requested_codes = self._resolve_universe(basics, ts_codes, limit)
+        requested_codes = self._normalize_universe(universe)
 
         frames: list[pd.DataFrame] = []
         loaded_codes: list[str] = []
@@ -101,37 +97,22 @@ class TenBaggerDataLoader:
 
         return empty_standard_frame()
 
-    def load_all(self, ts_codes: Iterable[str] | None = None, limit: int = 10) -> LoadResult:
+    def load_all(self, universe: Iterable[str]) -> LoadResult:
         """Load the current TASK 1 primary source."""
 
-        return self.load_tushare(ts_codes=ts_codes, limit=limit)
+        return self.load_tushare(universe=universe)
 
     def _stock_basic(self, pro) -> pd.DataFrame:
         fields = "ts_code,symbol,name,area,industry,list_date"
         return pro.stock_basic(exchange="", list_status="L", fields=fields)
 
-    def _resolve_universe(
-        self,
-        basics: pd.DataFrame,
-        ts_codes: Iterable[str] | None,
-        limit: int,
-    ) -> list[str]:
-        if ts_codes:
-            return list(dict.fromkeys(str(code).strip() for code in ts_codes if str(code).strip()))
-
-        available = set(basics["ts_code"].dropna().astype(str))
-        selected = [code for code in DEFAULT_UNIVERSE if code in available]
-        if len(selected) >= limit:
-            return selected[:limit]
-
-        fallback = (
-            basics[~basics["name"].astype(str).str.contains("退", na=False)]["ts_code"]
-            .dropna()
-            .astype(str)
-            .head(limit)
-            .tolist()
+    def _normalize_universe(self, universe: Iterable[str]) -> list[str]:
+        requested_codes = list(
+            dict.fromkeys(str(code).strip().upper() for code in universe if str(code).strip())
         )
-        return list(dict.fromkeys(selected + fallback))[:limit]
+        if not requested_codes:
+            raise ValueError("DataLoader requires an explicit non-empty universe.")
+        return requested_codes
 
     def _load_one_tushare_stock(self, pro, basics: pd.DataFrame, ts_code: str) -> pd.DataFrame:
         daily = pro.daily(

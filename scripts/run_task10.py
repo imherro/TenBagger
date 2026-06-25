@@ -15,11 +15,16 @@ from tenbagger.task10 import run_task10
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run TenBagger TASK 10 market structure engine.")
+    parser.add_argument("--universe", default="dev", choices=["dev", "research", "production"])
     parser.add_argument("--data-dir", default=str(ROOT / "data"))
     parser.add_argument("--report-dir", default=str(ROOT / "reports"))
     args = parser.parse_args()
 
-    report = run_task10(data_dir=Path(args.data_dir), report_dir=Path(args.report_dir))
+    report = run_task10(
+        universe_level=args.universe,
+        data_dir=Path(args.data_dir),
+        report_dir=Path(args.report_dir),
+    )
     print(
         json.dumps(
             {

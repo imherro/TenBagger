@@ -12,10 +12,11 @@ from tenbagger.structure import StructureRunResult, run_structure_pipeline
 
 
 def run_task10(
+    universe_level: str = "dev",
     data_dir: Path | str = DEFAULT_DATA_DIR,
     report_dir: Path | str = DEFAULT_REPORT_DIR,
 ) -> dict[str, Any]:
-    result = run_structure_pipeline(data_dir=data_dir)
+    result = run_structure_pipeline(data_dir=data_dir, universe_level=universe_level)
     report = _build_report(result)
 
     data_path = Path(data_dir) / "structure"
@@ -36,6 +37,7 @@ def _build_report(result: StructureRunResult) -> dict[str, Any]:
     return {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "task": "TASK 10 - Market Structure Decomposition Engine",
+        "universe": result.source.get("universe", {}),
         "latest": result.latest,
         "api_response": _api_response(result.latest),
         "validation": result.validation,

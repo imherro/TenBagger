@@ -62,6 +62,7 @@ def build_task2_report(
     validation: FactorValidation,
     storage: FactorStorageResult,
     report_dir: Path | str = DEFAULT_REPORT_DIR,
+    universe: dict[str, Any] | None = None,
 ) -> dict[str, Any]:
     report_path = Path(report_dir)
     report_path.mkdir(parents=True, exist_ok=True)
@@ -83,6 +84,7 @@ def build_task2_report(
             "end": str(factors["date"].max()),
         },
         "latest_trading_date": latest_date,
+        "universe": universe or {},
         "validation": asdict(validation),
         "score_distribution": {
             column: {

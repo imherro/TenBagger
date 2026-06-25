@@ -213,19 +213,32 @@ class BehaviorValidator:
         }
 
 
-def load_or_build_regime_daily(data_dir: Path | str = DEFAULT_DATA_DIR) -> tuple[pd.DataFrame, dict[str, Any]]:
+def load_or_build_regime_daily(
+    data_dir: Path | str = DEFAULT_DATA_DIR,
+    universe_level: str = "dev",
+) -> tuple[pd.DataFrame, dict[str, Any]]:
     data_path = Path(data_dir)
     regime_path = data_path / "regime" / "market_regime_daily.parquet"
     if regime_path.exists():
-        return pd.read_parquet(regime_path), {"source": "task8_market_regime_daily", "path": str(regime_path)}
-    result: RegimeRunResult = run_market_regime_pipeline(data_dir=data_path)
+        return pd.read_parquet(regime_path), {
+            "source": "task8_market_regime_daily",
+            "path": str(regime_path),
+            "universe_level": universe_level,
+        }
+    result: RegimeRunResult = run_market_regime_pipeline(
+        data_dir=data_path,
+        universe_level=universe_level,
+    )
     regime_path.parent.mkdir(parents=True, exist_ok=True)
     result.daily.to_parquet(regime_path, index=False)
     return result.daily, {"source": "rebuilt_task8_market_regime_daily", **result.data_source}
 
 
-def run_behavior_pipeline(data_dir: Path | str = DEFAULT_DATA_DIR) -> BehaviorRunResult:
-    regime_daily, source = load_or_build_regime_daily(data_dir)
+def run_behavior_pipeline(
+    data_dir: Path | str = DEFAULT_DATA_DIR,
+    universe_level: str = "dev",
+) -> BehaviorRunResult:
+    regime_daily, source = load_or_build_regime_daily(data_dir, universe_level=universe_level)
     return BehaviorFlowEngine().run(regime_daily, source=source)
 
 

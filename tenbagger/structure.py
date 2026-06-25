@@ -11,6 +11,7 @@ import pandas as pd
 from tenbagger.behavior import BehaviorRunResult, run_behavior_pipeline
 from tenbagger.config import DEFAULT_DATA_DIR
 from tenbagger.portfolio import load_local_task_data
+from tenbagger.universe import UniverseManager
 
 
 @dataclass(frozen=True)
@@ -213,20 +214,35 @@ class StructureValidator:
         }
 
 
-def load_or_build_behavior_daily(data_dir: Path | str = DEFAULT_DATA_DIR) -> tuple[pd.DataFrame, dict[str, Any]]:
+def load_or_build_behavior_daily(
+    data_dir: Path | str = DEFAULT_DATA_DIR,
+    universe_level: str = "dev",
+) -> tuple[pd.DataFrame, dict[str, Any]]:
     data_path = Path(data_dir)
     behavior_path = data_path / "behavior" / "market_behavior_daily.parquet"
     if behavior_path.exists():
-        return pd.read_parquet(behavior_path), {"source": "task9_market_behavior_daily", "path": str(behavior_path)}
-    result: BehaviorRunResult = run_behavior_pipeline(data_dir=data_path)
+        return pd.read_parquet(behavior_path), {
+            "source": "task9_market_behavior_daily",
+            "path": str(behavior_path),
+            "universe_level": universe_level,
+        }
+    result: BehaviorRunResult = run_behavior_pipeline(
+        data_dir=data_path,
+        universe_level=universe_level,
+    )
     behavior_path.parent.mkdir(parents=True, exist_ok=True)
     result.daily.to_parquet(behavior_path, index=False)
     return result.daily, {"source": "rebuilt_task9_market_behavior_daily", **result.source}
 
 
-def run_structure_pipeline(data_dir: Path | str = DEFAULT_DATA_DIR) -> StructureRunResult:
-    _factors, prices = load_local_task_data(data_dir)
-    behavior_daily, source = load_or_build_behavior_daily(data_dir)
+def run_structure_pipeline(
+    data_dir: Path | str = DEFAULT_DATA_DIR,
+    universe_level: str = "dev",
+) -> StructureRunResult:
+    universe = UniverseManager().resolve(universe_level)
+    _factors, prices = load_local_task_data(data_dir, universe=universe.codes)
+    behavior_daily, source = load_or_build_behavior_daily(data_dir, universe_level=universe.level)
+    source["universe"] = universe.to_api()
     return MarketStructureEngine().run(prices, behavior_daily, source=source)
 
 

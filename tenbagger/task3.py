@@ -15,18 +15,21 @@ from tenbagger.config import DEFAULT_DATA_DIR, DEFAULT_REPORT_DIR
 from tenbagger.factor_engine import FACTOR_COLUMNS, FactorEngine
 from tenbagger.factor_storage import FactorStorage
 from tenbagger.screener import HardFilter
+from tenbagger.universe import UniverseManager
 
 
 def run_task3(
+    universe_level: str = "dev",
     data_dir: Path | str = DEFAULT_DATA_DIR,
     report_dir: Path | str = DEFAULT_REPORT_DIR,
 ) -> dict[str, Any]:
+    universe = UniverseManager().resolve(universe_level)
     data_path = Path(data_dir)
     report_path = Path(report_dir)
     report_path.mkdir(parents=True, exist_ok=True)
 
     engine = FactorEngine()
-    task1_data = engine.read_task1_parquet(data_path)
+    task1_data = engine.read_task1_parquet(data_path, universe=universe.codes)
     factors = engine.compute(task1_data)
     validation = engine.validate(factors)
     FactorStorage(data_path).write(factors)
@@ -49,6 +52,7 @@ def run_task3(
     report = {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "task": "TASK 3 - Screener and alpha validation",
+        "universe": universe.to_api(),
         "stock_count": int(factors["ts_code"].nunique()),
         "row_count": int(len(factors)),
         "latest_trading_date": str(factors["date"].max()),

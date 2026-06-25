@@ -10,6 +10,7 @@ import pandas as pd
 
 from tenbagger.config import DEFAULT_DATA_DIR, compact_date, default_start_date, get_setting
 from tenbagger.portfolio import load_local_task_data
+from tenbagger.universe import UniverseManager
 
 
 INDEX_CODES = {
@@ -40,26 +41,42 @@ class MarketIndexLoader:
         self.start_date = compact_date(start_date or default_start_date(days=1400))
         self.end_date = compact_date(end_date)
 
-    def load(self, data_dir: Path | str = DEFAULT_DATA_DIR, refresh: bool = False) -> tuple[pd.DataFrame, dict[str, Any]]:
+    def load(
+        self,
+        data_dir: Path | str = DEFAULT_DATA_DIR,
+        refresh: bool = False,
+        universe: list[str] | None = None,
+        universe_level: str = "dev",
+    ) -> tuple[pd.DataFrame, dict[str, Any]]:
         data_path = Path(data_dir)
         cache_path = data_path / "regime" / "index_daily.parquet"
         if cache_path.exists() and not refresh:
             frame = pd.read_parquet(cache_path)
-            return self._prepare_index_frame(frame), {"source": "cached_tushare_index", "cache_path": str(cache_path)}
+            return self._prepare_index_frame(frame), {
+                "source": "cached_tushare_index",
+                "cache_path": str(cache_path),
+                "universe_level": universe_level,
+            }
 
         if self.token:
             try:
                 frame = self._load_tushare_index()
                 cache_path.parent.mkdir(parents=True, exist_ok=True)
                 frame.to_parquet(cache_path, index=False)
-                return self._prepare_index_frame(frame), {"source": "tushare_index", "cache_path": str(cache_path)}
+                return self._prepare_index_frame(frame), {
+                    "source": "tushare_index",
+                    "cache_path": str(cache_path),
+                    "universe_level": universe_level,
+                }
             except Exception as exc:  # pragma: no cover - remote API guard
-                fallback, meta = self._fallback_equal_weight(data_path)
+                fallback, meta = self._fallback_equal_weight(data_path, universe=universe)
                 meta["tushare_error"] = str(exc)
+                meta["universe_level"] = universe_level
                 return fallback, meta
 
-        fallback, meta = self._fallback_equal_weight(data_path)
+        fallback, meta = self._fallback_equal_weight(data_path, universe=universe)
         meta["tushare_error"] = "TUSHARE_TOKEN is not configured"
+        meta["universe_level"] = universe_level
         return fallback, meta
 
     def _load_tushare_index(self) -> pd.DataFrame:
@@ -90,8 +107,8 @@ class MarketIndexLoader:
             raise RuntimeError("TuShare returned no index rows for CSI300 or CSI500.")
         return pd.concat(frames, ignore_index=True)
 
-    def _fallback_equal_weight(self, data_path: Path) -> tuple[pd.DataFrame, dict[str, Any]]:
-        _factors, prices = load_local_task_data(data_path)
+    def _fallback_equal_weight(self, data_path: Path, universe: list[str] | None) -> tuple[pd.DataFrame, dict[str, Any]]:
+        _factors, prices = load_local_task_data(data_path, universe=universe)
         frame = prices[["ts_code", "date", "close"]].copy()
         frame["date"] = pd.to_datetime(frame["date"], errors="coerce")
         frame["close"] = pd.to_numeric(frame["close"], errors="coerce")
@@ -334,9 +351,20 @@ class RegimeValidator:
         return pd.DataFrame(rows)
 
 
-def run_market_regime_pipeline(data_dir: Path | str = DEFAULT_DATA_DIR, refresh_index: bool = False) -> RegimeRunResult:
+def run_market_regime_pipeline(
+    data_dir: Path | str = DEFAULT_DATA_DIR,
+    refresh_index: bool = False,
+    universe_level: str = "dev",
+) -> RegimeRunResult:
+    universe = UniverseManager().resolve(universe_level)
     loader = MarketIndexLoader()
-    index_data, source = loader.load(data_dir=data_dir, refresh=refresh_index)
+    index_data, source = loader.load(
+        data_dir=data_dir,
+        refresh=refresh_index,
+        universe=universe.codes,
+        universe_level=universe.level,
+    )
+    source["universe"] = universe.to_api()
     return MarketRegimeEngine().run(index_data, data_source=source)
 
 

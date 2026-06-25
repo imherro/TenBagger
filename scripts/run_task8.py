@@ -15,12 +15,14 @@ from tenbagger.task8 import run_task8
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run TenBagger TASK 8 market regime engine.")
+    parser.add_argument("--universe", default="dev", choices=["dev", "research", "production"])
     parser.add_argument("--data-dir", default=str(ROOT / "data"))
     parser.add_argument("--report-dir", default=str(ROOT / "reports"))
     parser.add_argument("--refresh-index", action="store_true")
     args = parser.parse_args()
 
     report = run_task8(
+        universe_level=args.universe,
         data_dir=Path(args.data_dir),
         report_dir=Path(args.report_dir),
         refresh_index=args.refresh_index,

@@ -4,11 +4,13 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 from pathlib import Path
+from typing import Iterable
 
 import pandas as pd
 
 from tenbagger.config import DEFAULT_DATA_DIR
 from tenbagger.schema import ensure_standard_schema
+from tenbagger.universe import filter_frame_to_universe
 
 
 FACTOR_COLUMNS = [
@@ -40,7 +42,11 @@ class FactorEngine:
         self.neutral_score = neutral_score
 
     @classmethod
-    def read_task1_parquet(cls, data_dir: Path | str = DEFAULT_DATA_DIR) -> pd.DataFrame:
+    def read_task1_parquet(
+        cls,
+        data_dir: Path | str = DEFAULT_DATA_DIR,
+        universe: Iterable[str] | None = None,
+    ) -> pd.DataFrame:
         by_stock = Path(data_dir) / "parquet" / "by_stock"
         if not by_stock.exists():
             raise FileNotFoundError(f"TASK 1 by-stock parquet directory not found: {by_stock}")
@@ -48,7 +54,11 @@ class FactorEngine:
         frames = [pd.read_parquet(path) for path in sorted(by_stock.glob("*.parquet"))]
         if not frames:
             raise FileNotFoundError(f"No TASK 1 parquet files found under: {by_stock}")
-        return ensure_standard_schema(pd.concat(frames, ignore_index=True))
+        frame = ensure_standard_schema(pd.concat(frames, ignore_index=True))
+        frame = filter_frame_to_universe(frame, universe)
+        if frame.empty:
+            raise ValueError("No TASK 1 rows match the selected universe.")
+        return frame
 
     def compute(self, df: pd.DataFrame) -> pd.DataFrame:
         """Return a complete factor dataframe with no score NaN propagation."""

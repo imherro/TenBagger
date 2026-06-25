@@ -17,19 +17,22 @@ from tenbagger.portfolio import (
     RiskMetrics,
     load_local_task_data,
 )
+from tenbagger.universe import UniverseManager
 
 
 def run_task4(
+    universe_level: str = "dev",
     data_dir: Path | str = DEFAULT_DATA_DIR,
     report_dir: Path | str = DEFAULT_REPORT_DIR,
     top_k: int = 20,
     weight_mode: str = "score",
 ) -> dict[str, Any]:
+    universe = UniverseManager().resolve(universe_level)
     data_path = Path(data_dir)
     report_path = Path(report_dir)
     report_path.mkdir(parents=True, exist_ok=True)
 
-    factors, prices = load_local_task_data(data_path)
+    factors, prices = load_local_task_data(data_path, universe=universe.codes)
     config = BacktestConfig(top_k=top_k, weight_mode=weight_mode)  # type: ignore[arg-type]
     builder = PortfolioBuilder(config)
     result = builder.run_backtest(factors, prices)
@@ -55,6 +58,7 @@ def run_task4(
     report = {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "task": "TASK 4 - Portfolio Simulation Engine",
+        "universe": universe.to_api(),
         "config": {
             "top_k": config.top_k,
             "rebalance": config.rebalance,

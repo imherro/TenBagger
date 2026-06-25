@@ -15,11 +15,16 @@ from tenbagger.task7 import run_task7
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run TenBagger TASK 7 structural alpha validation.")
+    parser.add_argument("--universe", default="dev", choices=["dev", "research", "production"])
     parser.add_argument("--data-dir", default=str(ROOT / "data"))
     parser.add_argument("--report-dir", default=str(ROOT / "reports"))
     args = parser.parse_args()
 
-    report = run_task7(data_dir=Path(args.data_dir), report_dir=Path(args.report_dir))
+    report = run_task7(
+        universe_level=args.universe,
+        data_dir=Path(args.data_dir),
+        report_dir=Path(args.report_dir),
+    )
     print(
         json.dumps(
             {

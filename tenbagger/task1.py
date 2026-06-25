@@ -3,28 +3,32 @@
 from __future__ import annotations
 
 from pathlib import Path
-from typing import Iterable
 
 from tenbagger.config import DEFAULT_DATA_DIR, DEFAULT_REPORT_DIR
 from tenbagger.data_loader import TenBaggerDataLoader
 from tenbagger.reporting import build_task1_report
 from tenbagger.storage import ParquetStorage
+from tenbagger.universe import UniverseManager
 
 
 def run_task1(
-    ts_codes: Iterable[str] | None = None,
-    limit: int = 10,
+    universe_level: str = "dev",
     start_date: str | None = None,
     end_date: str | None = None,
     data_dir: Path | str = DEFAULT_DATA_DIR,
     report_dir: Path | str = DEFAULT_REPORT_DIR,
 ) -> dict:
+    universe = UniverseManager().resolve(universe_level)
     loader = TenBaggerDataLoader(start_date=start_date, end_date=end_date)
-    load_result = loader.load_all(ts_codes=ts_codes, limit=limit)
+    load_result = loader.load_all(universe=universe.codes)
 
     storage_result = ParquetStorage(data_dir).write(load_result.frame)
     storage = {
         "source": load_result.source,
+        "universe": universe.to_api(),
+        "universe_level": universe.level,
+        "universe_count": len(universe.codes),
+        "universe_sample": universe.codes[:20],
         "requested_codes": load_result.requested_codes,
         "loaded_codes": load_result.loaded_codes,
         "by_stock_files": storage_result.by_stock_files,

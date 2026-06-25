@@ -198,19 +198,32 @@ class AnomalyValidator:
         }
 
 
-def load_or_build_structure_daily(data_dir: Path | str = DEFAULT_DATA_DIR) -> tuple[pd.DataFrame, dict[str, Any]]:
+def load_or_build_structure_daily(
+    data_dir: Path | str = DEFAULT_DATA_DIR,
+    universe_level: str = "dev",
+) -> tuple[pd.DataFrame, dict[str, Any]]:
     data_path = Path(data_dir)
     structure_path = data_path / "structure" / "market_structure_daily.parquet"
     if structure_path.exists():
-        return pd.read_parquet(structure_path), {"source": "task10_market_structure_daily", "path": str(structure_path)}
-    result: StructureRunResult = run_structure_pipeline(data_dir=data_path)
+        return pd.read_parquet(structure_path), {
+            "source": "task10_market_structure_daily",
+            "path": str(structure_path),
+            "universe_level": universe_level,
+        }
+    result: StructureRunResult = run_structure_pipeline(
+        data_dir=data_path,
+        universe_level=universe_level,
+    )
     structure_path.parent.mkdir(parents=True, exist_ok=True)
     result.daily.to_parquet(structure_path, index=False)
     return result.daily, {"source": "rebuilt_task10_market_structure_daily", **result.source}
 
 
-def run_anomaly_pipeline(data_dir: Path | str = DEFAULT_DATA_DIR) -> AnomalyRunResult:
-    structure_daily, source = load_or_build_structure_daily(data_dir)
+def run_anomaly_pipeline(
+    data_dir: Path | str = DEFAULT_DATA_DIR,
+    universe_level: str = "dev",
+) -> AnomalyRunResult:
+    structure_daily, source = load_or_build_structure_daily(data_dir, universe_level=universe_level)
     return StructuralAnomalyEngine().run(structure_daily, source=source)
 
 

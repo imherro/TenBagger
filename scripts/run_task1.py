@@ -15,17 +15,15 @@ from tenbagger.task1 import run_task1
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run TenBagger TASK 1 data loader.")
-    parser.add_argument("--limit", type=int, default=10)
+    parser.add_argument("--universe", default="dev", choices=["dev", "research", "production"])
     parser.add_argument("--start-date", default=None)
     parser.add_argument("--end-date", default=None)
-    parser.add_argument("--ts-code", action="append", dest="ts_codes", default=None)
     parser.add_argument("--data-dir", default=str(ROOT / "data"))
     parser.add_argument("--report-dir", default=str(ROOT / "reports"))
     args = parser.parse_args()
 
     report = run_task1(
-        ts_codes=args.ts_codes,
-        limit=args.limit,
+        universe_level=args.universe,
         start_date=args.start_date,
         end_date=args.end_date,
         data_dir=Path(args.data_dir),
@@ -39,6 +37,8 @@ def main() -> int:
                 "date_range": report["date_range"],
                 "latest_trading_date": report["latest_trading_date"],
                 "missing_rates": report["missing_rates"],
+                "universe_level": report["storage"]["universe_level"],
+                "universe_count": report["storage"]["universe_count"],
                 "loaded_codes": report["storage"]["loaded_codes"],
             },
             ensure_ascii=False,

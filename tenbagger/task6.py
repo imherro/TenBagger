@@ -11,13 +11,16 @@ from typing import Any
 from tenbagger.config import DEFAULT_DATA_DIR, DEFAULT_REPORT_DIR
 from tenbagger.monetization import MonetizationOptimizer
 from tenbagger.optimization import load_optimization_inputs
+from tenbagger.universe import UniverseManager
 
 
 def run_task6(
+    universe_level: str = "dev",
     data_dir: Path | str = DEFAULT_DATA_DIR,
     report_dir: Path | str = DEFAULT_REPORT_DIR,
 ) -> dict[str, Any]:
-    factors, prices = load_optimization_inputs(data_dir)
+    universe = UniverseManager().resolve(universe_level)
+    factors, prices = load_optimization_inputs(data_dir, universe=universe.codes)
     # Use the latest TASK 5 stable IC weights as the signal input.
     weights = {
         "growth_score": 0.0,
@@ -31,6 +34,7 @@ def run_task6(
     report = {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "task": "TASK 6 - Alpha Monetization Layer",
+        "universe": universe.to_api(),
         "input_weights": weights,
         "best_config": result.best_config,
         "train_metrics": result.train_metrics,

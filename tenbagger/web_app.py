@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from tenbagger.config import DEFAULT_REPORT_DIR
+from tenbagger.universe import UniverseManager
 
 
 def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
@@ -39,6 +40,14 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
         report = _load_report(report_path)
         status = 200 if report else 404
         return JSONResponse(report or {"error": "TASK 1 report not found"}, status_code=status)
+
+    @app.get("/api/universe")
+    def universe_api(level: str = "dev") -> JSONResponse:
+        try:
+            details = UniverseManager.get_details(level)
+        except Exception as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+        return JSONResponse(details)
 
     @app.get("/api/task2")
     def task2_api() -> JSONResponse:

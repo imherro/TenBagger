@@ -15,6 +15,7 @@ from tenbagger.task4 import run_task4
 
 def main() -> int:
     parser = argparse.ArgumentParser(description="Run TenBagger TASK 4 portfolio backtest.")
+    parser.add_argument("--universe", default="dev", choices=["dev", "research", "production"])
     parser.add_argument("--data-dir", default=str(ROOT / "data"))
     parser.add_argument("--report-dir", default=str(ROOT / "reports"))
     parser.add_argument("--top-k", type=int, default=20)
@@ -22,6 +23,7 @@ def main() -> int:
     args = parser.parse_args()
 
     report = run_task4(
+        universe_level=args.universe,
         data_dir=Path(args.data_dir),
         report_dir=Path(args.report_dir),
         top_k=args.top_k,

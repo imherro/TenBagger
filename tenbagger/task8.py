@@ -13,11 +13,16 @@ from tenbagger.regime import RegimeRunResult, run_market_regime_pipeline
 
 
 def run_task8(
+    universe_level: str = "dev",
     data_dir: Path | str = DEFAULT_DATA_DIR,
     report_dir: Path | str = DEFAULT_REPORT_DIR,
     refresh_index: bool = False,
 ) -> dict[str, Any]:
-    result = run_market_regime_pipeline(data_dir=data_dir, refresh_index=refresh_index)
+    result = run_market_regime_pipeline(
+        data_dir=data_dir,
+        refresh_index=refresh_index,
+        universe_level=universe_level,
+    )
     report = _build_report(result)
 
     data_path = Path(data_dir) / "regime"
@@ -38,6 +43,7 @@ def _build_report(result: RegimeRunResult) -> dict[str, Any]:
     return {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "task": "TASK 8 - Market Regime & Behavioral State Engine",
+        "universe": result.data_source.get("universe", {}),
         "latest": result.latest,
         "api_response": _api_response(result.latest),
         "validation": result.validation,

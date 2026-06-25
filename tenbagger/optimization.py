@@ -5,7 +5,7 @@ from __future__ import annotations
 from dataclasses import dataclass
 from itertools import product
 from pathlib import Path
-from typing import Any
+from typing import Any, Iterable
 
 import pandas as pd
 
@@ -288,5 +288,8 @@ class FactorWeightOptimizer:
         return summary
 
 
-def load_optimization_inputs(data_dir: Path | str = DEFAULT_DATA_DIR) -> tuple[pd.DataFrame, pd.DataFrame]:
-    return load_local_task_data(data_dir)
+def load_optimization_inputs(
+    data_dir: Path | str = DEFAULT_DATA_DIR,
+    universe: Iterable[str] | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
+    return load_local_task_data(data_dir, universe=universe)

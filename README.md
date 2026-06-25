@@ -48,11 +48,31 @@ python -m pip install -r requirements.txt
 ## Run TASK 1
 
 ```powershell
-python scripts/run_task1.py --limit 10 --start-date 20230101
+python scripts/run_task1.py --universe dev --start-date 20230101
 ```
 
 Generated parquet files are written under `data/parquet/` and reports under
 `reports/`. Both folders are local runtime outputs and are not committed.
+
+## Universe Selection
+
+All task scripts accept the same universe switch:
+
+```powershell
+python scripts/run_universe.py --level research
+python scripts/run_task1.py --universe research
+python scripts/run_task2.py --universe research
+```
+
+Supported levels are:
+
+- `dev`: 50-stock development universe.
+- `research`: filtered research universe, normally 300 to 1000 stocks.
+- `production`: full filtered A-share universe.
+
+`tenbagger.universe.UniverseManager` is the single entry point for stock
+universe construction. `tenbagger.config.DEFAULT_UNIVERSE` is only a legacy
+`DEV_ONLY` marker and is not used for research selection.
 
 ## Web Display
 

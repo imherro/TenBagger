@@ -11,20 +11,9 @@ REPO_ROOT = Path(__file__).resolve().parents[1]
 DEFAULT_DATA_DIR = REPO_ROOT / "data"
 DEFAULT_REPORT_DIR = REPO_ROOT / "reports"
 
-DEFAULT_UNIVERSE = [
-    "000001.SZ",
-    "000651.SZ",
-    "000858.SZ",
-    "002415.SZ",
-    "002594.SZ",
-    "300750.SZ",
-    "600000.SH",
-    "600519.SH",
-    "600887.SH",
-    "601318.SH",
-    "603259.SH",
-    "688981.SH",
-]
+# Kept as a compatibility marker only. Research universes must be built through
+# tenbagger.universe.UniverseManager, not from this config module.
+DEFAULT_UNIVERSE = "DEV_ONLY"
 
 
 def load_env_file(path: Path | None = None) -> dict[str, str]:

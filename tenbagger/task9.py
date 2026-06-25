@@ -13,10 +13,11 @@ from tenbagger.config import DEFAULT_DATA_DIR, DEFAULT_REPORT_DIR
 
 
 def run_task9(
+    universe_level: str = "dev",
     data_dir: Path | str = DEFAULT_DATA_DIR,
     report_dir: Path | str = DEFAULT_REPORT_DIR,
 ) -> dict[str, Any]:
-    result = run_behavior_pipeline(data_dir=data_dir)
+    result = run_behavior_pipeline(data_dir=data_dir, universe_level=universe_level)
     report = _build_report(result)
 
     data_path = Path(data_dir) / "behavior"
@@ -37,6 +38,7 @@ def _build_report(result: BehaviorRunResult) -> dict[str, Any]:
     return {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "task": "TASK 9 - Market Behavior & Flow Engine",
+        "universe": result.source.get("universe", {}),
         "latest": result.latest,
         "api_response": _api_response(result.latest),
         "validation": result.validation,

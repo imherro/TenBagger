@@ -11,17 +11,21 @@ from typing import Any
 from tenbagger.config import DEFAULT_DATA_DIR, DEFAULT_REPORT_DIR
 from tenbagger.optimization import load_optimization_inputs
 from tenbagger.structural_validation import StructuralAlphaValidator
+from tenbagger.universe import UniverseManager
 
 
 def run_task7(
+    universe_level: str = "dev",
     data_dir: Path | str = DEFAULT_DATA_DIR,
     report_dir: Path | str = DEFAULT_REPORT_DIR,
 ) -> dict[str, Any]:
-    factors, prices = load_optimization_inputs(data_dir)
+    universe = UniverseManager().resolve(universe_level)
+    factors, prices = load_optimization_inputs(data_dir, universe=universe.codes)
     result = StructuralAlphaValidator(top_k=10).run(factors, prices)
     report = {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "task": "TASK 7 - Structural Alpha Validation Layer",
+        "universe": universe.to_api(),
         **asdict(result),
     }
 

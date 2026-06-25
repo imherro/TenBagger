@@ -4,12 +4,13 @@ from __future__ import annotations
 
 from dataclasses import asdict, dataclass
 from pathlib import Path
-from typing import Literal
+from typing import Iterable, Literal
 
 import pandas as pd
 
 from tenbagger.config import DEFAULT_DATA_DIR, compact_date, get_setting
 from tenbagger.factor_engine import FactorEngine
+from tenbagger.universe import filter_frame_to_universe
 
 
 WeightMode = Literal["equal", "score", "volatility_adjusted", "score_convex", "top_heavy"]
@@ -304,12 +305,18 @@ class RiskMetrics:
         return float(portfolio.cov(benchmark, ddof=0) / variance)
 
 
-def load_local_task_data(data_dir: Path | str = DEFAULT_DATA_DIR) -> tuple[pd.DataFrame, pd.DataFrame]:
+def load_local_task_data(
+    data_dir: Path | str = DEFAULT_DATA_DIR,
+    universe: Iterable[str] | None = None,
+) -> tuple[pd.DataFrame, pd.DataFrame]:
     engine = FactorEngine()
-    prices = engine.read_task1_parquet(data_dir)
+    prices = engine.read_task1_parquet(data_dir, universe=universe)
     factors_dir = Path(data_dir) / "factors" / "by_stock"
     if factors_dir.exists() and list(factors_dir.glob("*.parquet")):
         factors = pd.concat([pd.read_parquet(path) for path in sorted(factors_dir.glob("*.parquet"))], ignore_index=True)
+        factors = filter_frame_to_universe(factors, universe)
+        if factors.empty:
+            raise ValueError("No factor rows match the selected universe.")
     else:
         factors = engine.compute(prices)
     return factors, prices

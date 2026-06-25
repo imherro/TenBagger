@@ -10,18 +10,22 @@ from typing import Any
 
 from tenbagger.config import DEFAULT_DATA_DIR, DEFAULT_REPORT_DIR
 from tenbagger.optimization import FactorWeightOptimizer, load_optimization_inputs
+from tenbagger.universe import UniverseManager
 
 
 def run_task5(
+    universe_level: str = "dev",
     data_dir: Path | str = DEFAULT_DATA_DIR,
     report_dir: Path | str = DEFAULT_REPORT_DIR,
 ) -> dict[str, Any]:
-    factors, prices = load_optimization_inputs(data_dir)
+    universe = UniverseManager().resolve(universe_level)
+    factors, prices = load_optimization_inputs(data_dir, universe=universe.codes)
     result = FactorWeightOptimizer(step=0.25, top_k=10).optimize(factors, prices)
 
     report = {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
         "task": "TASK 5 - Factor Optimization and Alpha Improvement",
+        "universe": universe.to_api(),
         "candidates_evaluated": result.candidates_evaluated,
         "best_weights": result.best_weights,
         "train_metrics": result.train_metrics,
