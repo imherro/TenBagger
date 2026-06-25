@@ -15,6 +15,7 @@ Current milestones:
 - TASK 8: market regime and behavioral state engine.
 - TASK 9: market behavior and flow pressure engine.
 - TASK 10: market structure decomposition engine.
+- TASK 11: market structural anomaly detection engine.
 
 ## TASK 1 Scope
 
@@ -170,6 +171,18 @@ python scripts/run_task10.py
 TASK 10 writes market structure reports under `reports/` and daily structure
 data under `data/structure/`. It adds `GET /api/task10/structure` and a Market
 Structure Dashboard on the local web display.
+
+## Run TASK 11
+
+Run TASK 10 first, then:
+
+```powershell
+python scripts/run_task11.py
+```
+
+TASK 11 writes anomaly reports under `reports/` and daily anomaly data under
+`data/anomaly/`. It adds `GET /api/task11/anomaly` and a Structural Anomaly
+Dashboard on the local web display.
 
 ## Tests
 

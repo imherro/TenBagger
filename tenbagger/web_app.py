@@ -25,6 +25,7 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
     regime_report_path = Path(report_dir) / "task8_regime_summary.json"
     behavior_report_path = Path(report_dir) / "task9_behavior_summary.json"
     structure_report_path = Path(report_dir) / "task10_structure_summary.json"
+    anomaly_report_path = Path(report_dir) / "task11_anomaly_summary.json"
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -108,6 +109,18 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
         status = 200 if report else 404
         return JSONResponse(report.get("api_response", {}) if report else {"error": "TASK 10 report not found"}, status_code=status)
 
+    @app.get("/api/task11")
+    def task11_api() -> JSONResponse:
+        report = _load_report(anomaly_report_path)
+        status = 200 if report else 404
+        return JSONResponse(report or {"error": "TASK 11 report not found"}, status_code=status)
+
+    @app.get("/api/task11/anomaly")
+    def task11_anomaly_api() -> JSONResponse:
+        report = _load_report(anomaly_report_path)
+        status = 200 if report else 404
+        return JSONResponse(report.get("api_response", {}) if report else {"error": "TASK 11 report not found"}, status_code=status)
+
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
         report = _load_report(report_path)
@@ -120,6 +133,7 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
         regime_report = _load_report(regime_report_path)
         behavior_report = _load_report(behavior_report_path)
         structure_report = _load_report(structure_report_path)
+        anomaly_report = _load_report(anomaly_report_path)
         return _render_dashboard(
             report,
             factor_report,
@@ -131,6 +145,7 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
             regime_report,
             behavior_report,
             structure_report,
+            anomaly_report,
         )
 
     return app
@@ -156,6 +171,7 @@ def _render_dashboard(
     regime_report: dict[str, Any] | None,
     behavior_report: dict[str, Any] | None,
     structure_report: dict[str, Any] | None,
+    anomaly_report: dict[str, Any] | None,
 ) -> str:
     if report is None:
         content = """
@@ -209,6 +225,7 @@ def _render_dashboard(
     regime_section = _render_regime_section(regime_report)
     behavior_section = _render_behavior_section(behavior_report)
     structure_section = _render_structure_section(structure_report)
+    anomaly_section = _render_anomaly_section(anomaly_report)
 
     content = f"""
     <main class="shell">
@@ -243,6 +260,7 @@ def _render_dashboard(
       {regime_section}
       {behavior_section}
       {structure_section}
+      {anomaly_section}
     </main>
     """
     return _page(content)
@@ -893,6 +911,125 @@ def _render_structure_section(report: dict[str, Any] | None) -> str:
     """
 
 
+def _render_anomaly_section(report: dict[str, Any] | None) -> str:
+    if report is None:
+        return """
+        <section>
+          <h2>Structural Anomaly Dashboard</h2>
+          <table><tbody><tr><td>TASK 11 report not found</td></tr></tbody></table>
+        </section>
+        """
+
+    latest = report.get("latest", {})
+    api = report.get("api_response", {})
+    validation = report.get("validation", {})
+    history = report.get("history", {})
+    chart_tail = history.get("chart_tail", [])
+    anomaly_events = history.get("anomaly_events", [])
+    flow_events = history.get("flow_shock_events", [])
+
+    metric_cards = [
+        ("Risk", api.get("systemic_risk_level")),
+        ("Anomaly", _fmt(api.get("anomaly_score"))),
+        ("Dominant", api.get("dominant_anomaly_type")),
+        ("State", api.get("anomaly_state")),
+    ]
+    cards_html = "\n".join(
+        f"<div class='metric'><span>{html.escape(str(label))}</span><strong>{html.escape(str(value))}</strong></div>"
+        for label, value in metric_cards
+    )
+    detail_html = "\n".join(
+        f"<tr><td>{html.escape(str(key))}</td><td>{html.escape(_fmt(latest.get(key)))}</td></tr>"
+        for key in [
+            "date",
+            "structural_break_prob",
+            "correlation_break_prob",
+            "flow_shock_prob",
+            "behavioral_anomaly_score",
+            "cross_sector_decoupling_prob",
+            "liquidity_vacuum_prob",
+        ]
+    )
+    validation_html = "\n".join(
+        f"<tr><td>{html.escape(str(key))}</td><td>{html.escape(_fmt(validation.get(key)))}</td></tr>"
+        for key in [
+            "uses_future_return_labels",
+            "uses_alpha_model",
+            "predicts_market_direction",
+            "purely_observational",
+            "all_scores_bounded_0_1",
+            "anomaly_event_frequency",
+            "high_risk_frequency",
+            "recent_30d_mean_anomaly",
+        ]
+    )
+    event_html = "\n".join(
+        "<tr><td>{date}</td><td>{anomaly_state}</td><td>{anomaly_score}</td><td>{systemic_risk_level}</td></tr>".format(
+            **{key: html.escape(str(row.get(key, ""))) for key in ["date", "anomaly_state", "anomaly_score", "systemic_risk_level"]}
+        )
+        for row in anomaly_events[-10:]
+    )
+    if not event_html:
+        event_html = "<tr><td colspan='4'>No medium/high anomaly events in latest 120 observations</td></tr>"
+    flow_html = "\n".join(
+        "<tr><td>{date}</td><td>{flow_shock_prob}</td><td>{institutional_flow_shock_prob}</td><td>{retail_panic_cluster_prob}</td></tr>".format(
+            **{key: html.escape(str(row.get(key, ""))) for key in ["date", "flow_shock_prob", "institutional_flow_shock_prob", "retail_panic_cluster_prob"]}
+        )
+        for row in flow_events[-10:]
+    )
+    if not flow_html:
+        flow_html = "<tr><td colspan='4'>No recent flow shock events</td></tr>"
+
+    anomaly_chart = _sparkline_svg(chart_tail, "anomaly_score", "#be123c")
+    shock_heatmap = _value_heatmap(chart_tail, "anomaly_score", "#fee2e2", "#be123c")
+    correlation_chart = _sparkline_svg(chart_tail, "correlation_break_prob", "#7c3aed")
+    anomaly_strip = _anomaly_strip(chart_tail)
+
+    return f"""
+    <section>
+      <h2>Structural Anomaly Dashboard</h2>
+      <p>Purely observational anomaly detection across regime, behavior, and structure. Source: {html.escape(str(report.get("source", {}).get("source")))}</p>
+    </section>
+    <section class="metrics">{cards_html}</section>
+    <section>
+      <h2>Anomaly Timeline</h2>
+      {anomaly_chart}
+    </section>
+    <section>
+      <h2>Shock Detection Heatmap</h2>
+      {shock_heatmap}
+    </section>
+    <section>
+      <h2>Anomaly State Timeline</h2>
+      {anomaly_strip}
+    </section>
+    <section class="grid">
+      <div>
+        <h2>Anomaly Detail</h2>
+        <table><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>{detail_html}</tbody></table>
+      </div>
+      <div>
+        <h2>Anomaly Validation</h2>
+        <table><thead><tr><th>Check</th><th>Value</th></tr></thead><tbody>{validation_html}</tbody></table>
+      </div>
+    </section>
+    <section class="grid">
+      <div>
+        <h2>Correlation Breakdown</h2>
+        {correlation_chart}
+      </div>
+      <div>
+        <h2>Flow Shock Events</h2>
+        <table><thead><tr><th>Date</th><th>Flow</th><th>Inst</th><th>Retail</th></tr></thead><tbody>{flow_html}</tbody></table>
+      </div>
+    </section>
+    <section>
+      <h2>Anomaly Events</h2>
+      <table><thead><tr><th>Date</th><th>State</th><th>Score</th><th>Risk</th></tr></thead><tbody>{event_html}</tbody></table>
+    </section>
+    """
+
+
 def _fmt(value: Any) -> str:
     if isinstance(value, float):
         return f"{value:.4f}"
@@ -1008,6 +1145,25 @@ def _structure_strip(rows: list[dict[str, Any]]) -> str:
         date = html.escape(str(row.get("date", "")))
         cells.append(
             f"<span title='{date} {html.escape(state)}' style='background:{colors.get(state, '#64748b')}'></span>"
+        )
+    return f"<div class='regime-strip'>{''.join(cells)}</div>"
+
+
+def _anomaly_strip(rows: list[dict[str, Any]]) -> str:
+    if not rows:
+        return "<div class='regime-strip empty'>Not enough data</div>"
+    colors = {
+        "low": "#0f766e",
+        "medium": "#b45309",
+        "high": "#be123c",
+    }
+    cells = []
+    for row in rows[-90:]:
+        risk = str(row.get("systemic_risk_level", "low"))
+        state = html.escape(str(row.get("anomaly_state", "")))
+        date = html.escape(str(row.get("date", "")))
+        cells.append(
+            f"<span title='{date} {state}' style='background:{colors.get(risk, '#64748b')}'></span>"
         )
     return f"<div class='regime-strip'>{''.join(cells)}</div>"
 
