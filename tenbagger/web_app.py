@@ -1189,6 +1189,7 @@ def _page(content: str) -> str:
         * {{ box-sizing: border-box; }}
         body {{
           margin: 0;
+          min-height: 100vh;
           font-family: Inter, "Segoe UI", Arial, sans-serif;
           background: var(--bg);
           color: var(--ink);
@@ -1322,6 +1323,22 @@ def _page(content: str) -> str:
         }}
       </style>
     </head>
-    <body>{content}</body>
+    <body>
+      <div data-myinvest-header></div>
+      {content}
+      <div data-myinvest-footer></div>
+      <script
+        src="https://invest.okbbc.com/header.js"
+        data-target="[data-myinvest-header]"
+        data-api="https://invest.okbbc.com/api/header"
+        defer
+      ></script>
+      <script
+        src="https://invest.okbbc.com/footer.js"
+        data-target="[data-myinvest-footer]"
+        data-api="https://invest.okbbc.com/api/footer"
+        defer
+      ></script>
+    </body>
     </html>
     """
