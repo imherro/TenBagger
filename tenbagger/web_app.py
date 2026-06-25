@@ -205,13 +205,18 @@ def _render_dashboard(
     )
     coverage_html = "\n".join(
         "<tr><td>{ts_code}</td><td>{rows}</td><td>{start_date}</td><td>{end_date}</td><td>{coverage_ratio:.2%}</td></tr>".format(
-            **item
+            ts_code=_stock_code_link(item.get("ts_code")),
+            rows=html.escape(str(item.get("rows", ""))),
+            start_date=html.escape(str(item.get("start_date", ""))),
+            end_date=html.escape(str(item.get("end_date", ""))),
+            coverage_ratio=float(item.get("coverage_ratio", 0.0)),
         )
         for item in coverage
     )
     snapshot_html = "\n".join(
         "<tr><td>{ts_code}</td><td>{close}</td><td>{revenue}</td><td>{net_profit}</td><td>{roe}</td><td>{pe}</td><td>{pb}</td><td>{market_cap}</td></tr>".format(
-            **{key: html.escape(str(row.get(key, ""))) for key in ["ts_code", "close", "revenue", "net_profit", "roe", "pe", "pb", "market_cap"]}
+            ts_code=_stock_code_link(row.get("ts_code")),
+            **{key: html.escape(str(row.get(key, ""))) for key in ["close", "revenue", "net_profit", "roe", "pe", "pb", "market_cap"]},
         )
         for row in snapshot
     )
@@ -283,7 +288,8 @@ def _render_factor_section(report: dict[str, Any] | None) -> str:
     )
     scores_html = "\n".join(
         "<tr><td>{ts_code}</td><td>{tenbagger_score}</td><td>{growth_score}</td><td>{quality_score}</td><td>{value_score}</td><td>{risk_score}</td><td>{momentum_score}</td></tr>".format(
-            **{key: html.escape(str(row.get(key, ""))) for key in ["ts_code", "tenbagger_score", "growth_score", "quality_score", "value_score", "risk_score", "momentum_score"]}
+            ts_code=_stock_code_link(row.get("ts_code")),
+            **{key: html.escape(str(row.get(key, ""))) for key in ["tenbagger_score", "growth_score", "quality_score", "value_score", "risk_score", "momentum_score"]},
         )
         for row in top_scores
     )
@@ -332,7 +338,8 @@ def _render_screener_section(report: dict[str, Any] | None) -> str:
     candidate_title = "Top Candidates" if candidates else "Near Misses"
     candidate_html = "\n".join(
         "<tr><td>{ts_code}</td><td>{tenbagger_score}</td><td>{industry}</td><td>{revenue_growth_yoy}</td><td>{roe}</td><td>{debt_ratio}</td><td>{fail_reasons}</td></tr>".format(
-            **{key: html.escape(str(row.get(key, ""))) for key in ["ts_code", "tenbagger_score", "industry", "revenue_growth_yoy", "roe", "debt_ratio", "fail_reasons"]}
+            ts_code=_stock_code_link(row.get("ts_code")),
+            **{key: html.escape(str(row.get(key, ""))) for key in ["tenbagger_score", "industry", "revenue_growth_yoy", "roe", "debt_ratio", "fail_reasons"]},
         )
         for row in candidate_rows
     )
@@ -394,7 +401,8 @@ def _render_backtest_section(report: dict[str, Any] | None) -> str:
     )
     holding_html = "\n".join(
         "<tr><td>{ts_code}</td><td>{weight}</td><td>{rebalance_date}</td></tr>".format(
-            **{key: html.escape(str(row.get(key, ""))) for key in ["ts_code", "weight", "rebalance_date"]}
+            ts_code=_stock_code_link(row.get("ts_code")),
+            **{key: html.escape(str(row.get(key, ""))) for key in ["weight", "rebalance_date"]},
         )
         for row in holdings
     )
@@ -1036,6 +1044,32 @@ def _fmt(value: Any) -> str:
     return str(value)
 
 
+def _stock_code_link(value: Any) -> str:
+    code = str(value or "").strip()
+    escaped_code = html.escape(code)
+    symbol = _xueqiu_symbol(code)
+    if not symbol:
+        return escaped_code
+    url = f"https://xueqiu.com/S/{symbol}"
+    label = html.escape(f"Open {code} on Xueqiu", quote=True)
+    return (
+        f'{escaped_code} <a class="stock-link" href="{url}" target="_blank" '
+        f'rel="noopener noreferrer" aria-label="{label}">Xueqiu</a>'
+    )
+
+
+def _xueqiu_symbol(code: str) -> str | None:
+    normalized = code.strip().upper()
+    if len(normalized) == 8 and normalized[:2] in {"SH", "SZ", "BJ"} and normalized[2:].isdigit():
+        return normalized
+    if len(normalized) != 9 or normalized[6] != ".":
+        return None
+    ticker, exchange = normalized[:6], normalized[7:]
+    if exchange not in {"SH", "SZ", "BJ"} or not ticker.isdigit():
+        return None
+    return f"{exchange}{ticker}"
+
+
 def _sparkline_svg(rows: list[dict[str, Any]], key: str, color: str) -> str:
     values = [float(row.get(key) or 0.0) for row in rows if row.get(key) is not None]
     if len(values) < 2:
@@ -1259,6 +1293,17 @@ def _page(content: str) -> str:
           background: #eef2f5;
         }}
         tr:last-child td {{ border-bottom: 0; }}
+        .stock-link {{
+          display: inline-block;
+          margin-left: 8px;
+          color: var(--accent);
+          font-size: 12px;
+          font-weight: 600;
+          text-decoration: none;
+        }}
+        .stock-link:hover {{
+          text-decoration: underline;
+        }}
         .empty {{
           background: var(--panel);
           border: 1px solid var(--line);
