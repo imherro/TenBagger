@@ -4,9 +4,12 @@ from __future__ import annotations
 
 import html
 import json
+from functools import lru_cache
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
+import pandas as pd
 from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
 
@@ -187,6 +190,7 @@ def _render_dashboard(
     missing = report.get("missing_rates", {})
     coverage = report.get("stock_coverage", [])
     snapshot = report.get("latest_snapshot", [])
+    stock_names = _stock_name_lookup(report)
 
     metric_cards = [
         ("Stocks", report.get("stock_count")),
@@ -205,7 +209,7 @@ def _render_dashboard(
     )
     coverage_html = "\n".join(
         "<tr><td>{ts_code}</td><td>{rows}</td><td>{start_date}</td><td>{end_date}</td><td>{coverage_ratio:.2%}</td></tr>".format(
-            ts_code=_stock_code_link(item.get("ts_code")),
+            ts_code=_stock_code_link(item.get("ts_code"), _stock_name_for(item, stock_names)),
             rows=html.escape(str(item.get("rows", ""))),
             start_date=html.escape(str(item.get("start_date", ""))),
             end_date=html.escape(str(item.get("end_date", ""))),
@@ -215,15 +219,15 @@ def _render_dashboard(
     )
     snapshot_html = "\n".join(
         "<tr><td>{ts_code}</td><td>{close}</td><td>{revenue}</td><td>{net_profit}</td><td>{roe}</td><td>{pe}</td><td>{pb}</td><td>{market_cap}</td></tr>".format(
-            ts_code=_stock_code_link(row.get("ts_code")),
+            ts_code=_stock_code_link(row.get("ts_code"), _stock_name_for(row, stock_names)),
             **{key: html.escape(str(row.get(key, ""))) for key in ["close", "revenue", "net_profit", "roe", "pe", "pb", "market_cap"]},
         )
         for row in snapshot
     )
 
-    factor_section = _render_factor_section(factor_report)
-    screener_section = _render_screener_section(screener_report)
-    backtest_section = _render_backtest_section(backtest_report)
+    factor_section = _render_factor_section(factor_report, stock_names)
+    screener_section = _render_screener_section(screener_report, stock_names)
+    backtest_section = _render_backtest_section(backtest_report, stock_names)
     optimization_section = _render_optimization_section(optimization_report)
     monetization_section = _render_monetization_section(monetization_report)
     structural_section = _render_structural_section(structural_report)
@@ -271,7 +275,7 @@ def _render_dashboard(
     return _page(content)
 
 
-def _render_factor_section(report: dict[str, Any] | None) -> str:
+def _render_factor_section(report: dict[str, Any] | None, stock_names: dict[str, str]) -> str:
     if report is None:
         return """
         <section>
@@ -288,7 +292,7 @@ def _render_factor_section(report: dict[str, Any] | None) -> str:
     )
     scores_html = "\n".join(
         "<tr><td>{ts_code}</td><td>{tenbagger_score}</td><td>{growth_score}</td><td>{quality_score}</td><td>{value_score}</td><td>{risk_score}</td><td>{momentum_score}</td></tr>".format(
-            ts_code=_stock_code_link(row.get("ts_code")),
+            ts_code=_stock_code_link(row.get("ts_code"), _stock_name_for(row, stock_names)),
             **{key: html.escape(str(row.get(key, ""))) for key in ["tenbagger_score", "growth_score", "quality_score", "value_score", "risk_score", "momentum_score"]},
         )
         for row in top_scores
@@ -310,7 +314,7 @@ def _render_factor_section(report: dict[str, Any] | None) -> str:
     """
 
 
-def _render_screener_section(report: dict[str, Any] | None) -> str:
+def _render_screener_section(report: dict[str, Any] | None, stock_names: dict[str, str]) -> str:
     if report is None:
         return """
         <section>
@@ -338,7 +342,7 @@ def _render_screener_section(report: dict[str, Any] | None) -> str:
     candidate_title = "Top Candidates" if candidates else "Near Misses"
     candidate_html = "\n".join(
         "<tr><td>{ts_code}</td><td>{tenbagger_score}</td><td>{industry}</td><td>{revenue_growth_yoy}</td><td>{roe}</td><td>{debt_ratio}</td><td>{fail_reasons}</td></tr>".format(
-            ts_code=_stock_code_link(row.get("ts_code")),
+            ts_code=_stock_code_link(row.get("ts_code"), _stock_name_for(row, stock_names)),
             **{key: html.escape(str(row.get(key, ""))) for key in ["tenbagger_score", "industry", "revenue_growth_yoy", "roe", "debt_ratio", "fail_reasons"]},
         )
         for row in candidate_rows
@@ -365,7 +369,7 @@ def _render_screener_section(report: dict[str, Any] | None) -> str:
     """
 
 
-def _render_backtest_section(report: dict[str, Any] | None) -> str:
+def _render_backtest_section(report: dict[str, Any] | None, stock_names: dict[str, str]) -> str:
     if report is None:
         return """
         <section>
@@ -401,7 +405,7 @@ def _render_backtest_section(report: dict[str, Any] | None) -> str:
     )
     holding_html = "\n".join(
         "<tr><td>{ts_code}</td><td>{weight}</td><td>{rebalance_date}</td></tr>".format(
-            ts_code=_stock_code_link(row.get("ts_code")),
+            ts_code=_stock_code_link(row.get("ts_code"), _stock_name_for(row, stock_names)),
             **{key: html.escape(str(row.get(key, ""))) for key in ["weight", "rebalance_date"]},
         )
         for row in holdings
@@ -1201,18 +1205,81 @@ HELP_TEXT = {
 }
 
 
-def _stock_code_link(value: Any) -> str:
+def _stock_name_lookup(report: dict[str, Any]) -> dict[str, str]:
+    names: dict[str, str] = {}
+    for section in ("stock_coverage", "latest_snapshot"):
+        for row in report.get(section, []):
+            if not isinstance(row, dict):
+                continue
+            code = str(row.get("ts_code") or "").strip()
+            name = str(row.get("name") or row.get("stock_name") or "").strip()
+            if code and name:
+                names[code] = name
+
+    for path in report.get("storage", {}).get("by_stock_files", []):
+        loaded = _stock_name_from_parquet(str(path))
+        if loaded is not None:
+            code, name = loaded
+            names.setdefault(code, name)
+    return names
+
+
+@lru_cache(maxsize=512)
+def _stock_name_from_parquet(path_text: str) -> tuple[str, str] | None:
+    path = Path(path_text)
+    if not path.exists():
+        return None
+    try:
+        frame = pd.read_parquet(path, columns=["ts_code", "name"])
+    except Exception:
+        return None
+    rows = frame.dropna(subset=["ts_code", "name"]).drop_duplicates(subset=["ts_code"]).head(1)
+    if rows.empty:
+        return None
+    row = rows.iloc[0]
+    code = str(row["ts_code"]).strip()
+    name = str(row["name"]).strip()
+    if not code or not name:
+        return None
+    return code, name
+
+
+def _stock_name_for(row: dict[str, Any], stock_names: dict[str, str]) -> str:
+    code = str(row.get("ts_code") or "").strip()
+    explicit_name = str(row.get("name") or row.get("stock_name") or "").strip()
+    return explicit_name or stock_names.get(code, "")
+
+
+def _stock_code_link(value: Any, stock_name: Any = None) -> str:
     code = str(value or "").strip()
     escaped_code = html.escape(code)
     symbol = _xueqiu_symbol(code)
-    if not symbol:
-        return escaped_code
-    url = f"https://xueqiu.com/S/{symbol}"
-    label = html.escape(f"Open {code} on Xueqiu", quote=True)
-    return (
-        f'{escaped_code} <a class="stock-link" href="{url}" target="_blank" '
-        f'rel="noopener noreferrer" aria-label="{label}">Xueqiu</a>'
+    if symbol:
+        url = f"https://xueqiu.com/S/{symbol}"
+        label = html.escape(f"Open {code} on Xueqiu", quote=True)
+        code_html = (
+            f'<a class="stock-link stock-code-link" href="{url}" target="_blank" '
+            f'rel="noopener noreferrer" aria-label="{label}">{escaped_code}</a>'
+        )
+    else:
+        code_html = escaped_code
+
+    name = str(stock_name or "").strip()
+    if not code or not name or name == code:
+        return code_html
+
+    research_url = _stock_research_url(code)
+    escaped_name = html.escape(name)
+    label = html.escape(f"Open {name} research page", quote=True)
+    name_html = (
+        f'<a class="stock-name-link" href="{research_url}" target="_blank" '
+        f'rel="noopener noreferrer" aria-label="{label}" title="打开主系统个股研究页">{escaped_name}</a>'
     )
+    return f'<span class="stock-identity">{code_html}<span class="stock-name-separator"> </span>{name_html}</span>'
+
+
+def _stock_research_url(code: str) -> str:
+    return f"https://stock.okbbc.com/research?stock={quote(code.strip(), safe='')}"
 
 
 def _xueqiu_symbol(code: str) -> str | None:
@@ -1477,15 +1544,27 @@ def _page(content: str) -> str:
           background: #eef2f5;
         }}
         tr:last-child td {{ border-bottom: 0; }}
+        .stock-identity {{
+          display: inline-flex;
+          align-items: baseline;
+          gap: 8px;
+          white-space: nowrap;
+        }}
         .stock-link {{
           display: inline-block;
-          margin-left: 8px;
           color: var(--accent);
+          font-size: 13px;
+          font-weight: 600;
+          text-decoration: none;
+        }}
+        .stock-name-link {{
+          color: #1d4ed8;
           font-size: 12px;
           font-weight: 600;
           text-decoration: none;
         }}
-        .stock-link:hover {{
+        .stock-link:hover,
+        .stock-name-link:hover {{
           text-decoration: underline;
         }}
         .empty {{

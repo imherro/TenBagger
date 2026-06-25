@@ -21,14 +21,16 @@ def test_xueqiu_symbol_converts_a_share_codes() -> None:
     assert _xueqiu_symbol("S0") is None
 
 
-def test_stock_code_link_opens_xueqiu_in_new_window() -> None:
-    linked = _stock_code_link("603259.SH")
+def test_stock_code_link_uses_code_for_xueqiu_and_name_for_research() -> None:
+    linked = _stock_code_link("603259.SH", "药明康德")
 
-    assert "603259.SH" in linked
+    assert ">603259.SH</a>" in linked
     assert 'href="https://xueqiu.com/S/SH603259"' in linked
+    assert 'href="https://stock.okbbc.com/research?stock=603259.SH"' in linked
     assert 'target="_blank"' in linked
     assert 'rel="noopener noreferrer"' in linked
-    assert ">Xueqiu</a>" in linked
+    assert ">药明康德</a>" in linked
+    assert ">Xueqiu</a>" not in linked
 
 
 def test_page_adds_chinese_hover_explanations() -> None:
