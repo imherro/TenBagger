@@ -22,6 +22,7 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
     optimization_report_path = Path(report_dir) / "task5_optimization_summary.json"
     monetization_report_path = Path(report_dir) / "task6_monetization_summary.json"
     structural_report_path = Path(report_dir) / "task7_structural_validation_summary.json"
+    regime_report_path = Path(report_dir) / "task8_regime_summary.json"
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -69,6 +70,18 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
         status = 200 if report else 404
         return JSONResponse(report or {"error": "TASK 7 report not found"}, status_code=status)
 
+    @app.get("/api/task8")
+    def task8_api() -> JSONResponse:
+        report = _load_report(regime_report_path)
+        status = 200 if report else 404
+        return JSONResponse(report or {"error": "TASK 8 report not found"}, status_code=status)
+
+    @app.get("/api/task8/regime")
+    def task8_regime_api() -> JSONResponse:
+        report = _load_report(regime_report_path)
+        status = 200 if report else 404
+        return JSONResponse(report.get("api_response", {}) if report else {"error": "TASK 8 report not found"}, status_code=status)
+
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
         report = _load_report(report_path)
@@ -78,6 +91,7 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
         optimization_report = _load_report(optimization_report_path)
         monetization_report = _load_report(monetization_report_path)
         structural_report = _load_report(structural_report_path)
+        regime_report = _load_report(regime_report_path)
         return _render_dashboard(
             report,
             factor_report,
@@ -86,6 +100,7 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
             optimization_report,
             monetization_report,
             structural_report,
+            regime_report,
         )
 
     return app
@@ -108,6 +123,7 @@ def _render_dashboard(
     optimization_report: dict[str, Any] | None,
     monetization_report: dict[str, Any] | None,
     structural_report: dict[str, Any] | None,
+    regime_report: dict[str, Any] | None,
 ) -> str:
     if report is None:
         content = """
@@ -158,6 +174,7 @@ def _render_dashboard(
     optimization_section = _render_optimization_section(optimization_report)
     monetization_section = _render_monetization_section(monetization_report)
     structural_section = _render_structural_section(structural_report)
+    regime_section = _render_regime_section(regime_report)
 
     content = f"""
     <main class="shell">
@@ -189,6 +206,7 @@ def _render_dashboard(
       {optimization_section}
       {monetization_section}
       {structural_section}
+      {regime_section}
     </main>
     """
     return _page(content)
@@ -515,6 +533,157 @@ def _render_structural_section(report: dict[str, Any] | None) -> str:
     """
 
 
+def _render_regime_section(report: dict[str, Any] | None) -> str:
+    if report is None:
+        return """
+        <section>
+          <h2>Market Regime Dashboard</h2>
+          <table><tbody><tr><td>TASK 8 report not found</td></tr></tbody></table>
+        </section>
+        """
+
+    latest = report.get("latest", {})
+    api = report.get("api_response", {})
+    validation = report.get("validation", {})
+    history = report.get("history", {})
+    chart_tail = history.get("chart_tail", [])
+    recent_changes = history.get("recent_30_changes", [])
+
+    metric_cards = [
+        ("Behavior", api.get("behavior_state")),
+        ("Trend", api.get("trend_regime")),
+        ("Volatility", api.get("volatility_regime")),
+        ("Liquidity", api.get("liquidity_regime")),
+    ]
+    cards_html = "\n".join(
+        f"<div class='metric'><span>{html.escape(str(label))}</span><strong>{html.escape(str(value))}</strong></div>"
+        for label, value in metric_cards
+    )
+    detail_html = "\n".join(
+        f"<tr><td>{html.escape(str(key))}</td><td>{html.escape(_fmt(latest.get(key)))}</td></tr>"
+        for key in [
+            "date",
+            "trend_strength",
+            "volatility_percentile",
+            "liquidity_score",
+            "regime_change_probability",
+            "stability_score",
+        ]
+    )
+    validation_html = "\n".join(
+        f"<tr><td>{html.escape(str(key))}</td><td>{html.escape(_fmt(validation.get(key)))}</td></tr>"
+        for key in [
+            "regime_autocorrelation",
+            "transition_frequency",
+            "recent_30d_transition_frequency",
+            "mean_duration_days",
+            "transition_not_overfit",
+            "regime_has_continuity",
+        ]
+    )
+    change_html = "\n".join(
+        "<tr><td>{date}</td><td>{trend_regime}</td><td>{volatility_regime}</td><td>{liquidity_regime}</td><td>{behavior_state}</td></tr>".format(
+            **{key: html.escape(str(row.get(key, ""))) for key in ["date", "trend_regime", "volatility_regime", "liquidity_regime", "behavior_state"]}
+        )
+        for row in recent_changes[-10:]
+    )
+    if not change_html:
+        change_html = "<tr><td colspan='5'>No regime changes in the latest 30 observations</td></tr>"
+
+    regime_strip = _regime_strip(chart_tail)
+    trend_chart = _sparkline_svg(chart_tail, "trend_strength", "#0f766e")
+    volatility_chart = _sparkline_svg(chart_tail, "realized_vol_20d", "#9f1239")
+    liquidity_chart = _sparkline_svg(chart_tail, "liquidity_score", "#1d4ed8")
+
+    return f"""
+    <section>
+      <h2>Market Regime Dashboard</h2>
+      <p>Behavioral state engine for route 2. Data source: {html.escape(str(report.get("data_source", {}).get("source")))}</p>
+    </section>
+    <section class="metrics">{cards_html}</section>
+    <section>
+      <h2>Regime History</h2>
+      {regime_strip}
+    </section>
+    <section class="grid">
+      <div>
+        <h2>Current Regime Detail</h2>
+        <table><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>{detail_html}</tbody></table>
+      </div>
+      <div>
+        <h2>Regime Validation</h2>
+        <table><thead><tr><th>Check</th><th>Value</th></tr></thead><tbody>{validation_html}</tbody></table>
+      </div>
+    </section>
+    <section class="grid">
+      <div>
+        <h2>Trend Strength</h2>
+        {trend_chart}
+      </div>
+      <div>
+        <h2>Volatility Curve</h2>
+        {volatility_chart}
+      </div>
+    </section>
+    <section>
+      <h2>Liquidity Curve</h2>
+      {liquidity_chart}
+    </section>
+    <section>
+      <h2>Recent Regime Changes</h2>
+      <table><thead><tr><th>Date</th><th>Trend</th><th>Volatility</th><th>Liquidity</th><th>Behavior</th></tr></thead><tbody>{change_html}</tbody></table>
+    </section>
+    """
+
+
+def _fmt(value: Any) -> str:
+    if isinstance(value, float):
+        return f"{value:.4f}"
+    return str(value)
+
+
+def _sparkline_svg(rows: list[dict[str, Any]], key: str, color: str) -> str:
+    values = [float(row.get(key) or 0.0) for row in rows if row.get(key) is not None]
+    if len(values) < 2:
+        return "<div class='chart empty'>Not enough data</div>"
+    width = 760
+    height = 150
+    min_value = min(values)
+    max_value = max(values)
+    span = max(max_value - min_value, 1e-9)
+    points = []
+    for idx, value in enumerate(values):
+        x = idx / max(len(values) - 1, 1) * width
+        y = height - ((value - min_value) / span * (height - 20) + 10)
+        points.append(f"{x:.2f},{y:.2f}")
+    return f"""
+    <svg class="chart" viewBox="0 0 {width} {height}" role="img" aria-label="{html.escape(key)} chart">
+      <rect x="0" y="0" width="{width}" height="{height}" rx="8"></rect>
+      <polyline points="{' '.join(points)}" fill="none" stroke="{color}" stroke-width="3"></polyline>
+    </svg>
+    """
+
+
+def _regime_strip(rows: list[dict[str, Any]]) -> str:
+    if not rows:
+        return "<div class='regime-strip empty'>Not enough data</div>"
+    colors = {
+        "risk_on": "#0f766e",
+        "risk_off": "#475569",
+        "panic": "#be123c",
+        "euphoria": "#b45309",
+        "transition": "#64748b",
+    }
+    cells = []
+    for row in rows[-90:]:
+        state = str(row.get("behavior_state", "transition"))
+        date = html.escape(str(row.get("date", "")))
+        cells.append(
+            f"<span title='{date} {html.escape(state)}' style='background:{colors.get(state, '#64748b')}'></span>"
+        )
+    return f"<div class='regime-strip'>{''.join(cells)}</div>"
+
+
 def _page(content: str) -> str:
     return f"""
     <!doctype html>
@@ -610,6 +779,31 @@ def _page(content: str) -> str:
           border: 1px solid var(--line);
           border-radius: 8px;
           padding: 24px;
+        }}
+        .chart {{
+          display: block;
+          width: 100%;
+          height: 150px;
+          background: var(--panel);
+          border: 1px solid var(--line);
+          border-radius: 8px;
+        }}
+        .chart rect {{
+          fill: #ffffff;
+        }}
+        .regime-strip {{
+          display: grid;
+          grid-template-columns: repeat(90, minmax(4px, 1fr));
+          gap: 2px;
+          background: var(--panel);
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          padding: 12px;
+        }}
+        .regime-strip span {{
+          display: block;
+          min-height: 26px;
+          border-radius: 3px;
         }}
         @media (max-width: 860px) {{
           .shell {{ padding: 18px; }}

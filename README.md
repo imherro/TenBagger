@@ -12,6 +12,7 @@ Current milestones:
 - TASK 5: factor neutralization and walk-forward weight optimization.
 - TASK 6: alpha monetization and execution optimization.
 - TASK 7: structural alpha validation and final alpha classification.
+- TASK 8: market regime and behavioral state engine.
 
 ## TASK 1 Scope
 
@@ -131,6 +132,18 @@ python scripts/run_task7.py
 TASK 7 writes the structural alpha validation report under
 `reports/task7_structural_validation_summary.json`. The output classifies the
 system as `REAL`, `PSEUDO`, or `NO ALPHA`.
+
+## Run TASK 8
+
+Run TASK 1 first so local market data exists, then:
+
+```powershell
+python scripts/run_task8.py
+```
+
+TASK 8 writes market regime reports under `reports/` and daily regime data under
+`data/regime/`. It adds `GET /api/task8/regime` and a Market Regime Dashboard on
+the local web display.
 
 ## Tests
 
