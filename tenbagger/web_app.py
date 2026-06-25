@@ -1044,6 +1044,163 @@ def _fmt(value: Any) -> str:
     return str(value)
 
 
+HELP_TEXT = {
+    "TenBagger": "十倍股寻找系统：把数据质量、因子打分、筛选、回测和市场结构研究放在一个页面里。",
+    "Stocks": "当前数据集中覆盖的股票数量。",
+    "Rows": "当前数据集中可用的日线或合并数据行数。",
+    "Latest Date": "当前数据更新到的最近交易日。",
+    "Date Range": "当前数据覆盖的起止日期。",
+    "Missing Rates": "字段缺失率；越低说明基础数据越完整。",
+    "Stock Coverage": "每只股票的数据覆盖情况，用来检查是否有缺口或样本太短。",
+    "Latest Snapshot": "每只股票最近一个交易日的核心财务和估值快照。",
+    "Factor Engine": "因子引擎：把成长、质量、估值、风险、动量等指标合成为十倍股评分。",
+    "Factor Validation": "因子校验：检查打分是否存在未来函数、空值或异常分布。",
+    "Latest Factor Scores": "最近一期因子评分；分数越高，模型认为越符合十倍股特征。",
+    "Screener": "筛选器：用硬条件和评分选出候选股或接近候选的股票。",
+    "Backtest Preview": "筛选结果的快速回测预览，只用于观察方向，不等同于交易建议。",
+    "IC Decay": "信息系数衰减；看当前评分对未来不同周期收益排序的解释力。",
+    "Top Candidates": "当前通过筛选条件的候选股。",
+    "Near Misses": "接近通过但仍有条件未满足的股票。",
+    "Portfolio Backtest": "组合回测：按模型规则构建组合后观察历史表现。",
+    "Risk Metrics": "风险收益指标，用来评估组合波动、回撤和胜率。",
+    "Benchmarks": "基准指数对照，用来判断组合是否跑赢市场。",
+    "Latest Holdings": "回测规则在最近一次调仓时给出的模拟持仓权重。",
+    "Factor Optimization": "因子权重优化：寻找更稳健的因子组合权重。",
+    "Best Weights": "优化后选择的各因子权重。",
+    "Baseline vs Optimized": "原始模型与优化后模型的指标对比。",
+    "IC Improvement": "优化前后排序预测能力的变化。",
+    "Alpha Monetization": "把因子信号转成组合收益的能力评估。",
+    "Best Config": "在测试集中表现相对更好的组合参数。",
+    "Test Metrics": "测试区间上的组合表现指标。",
+    "Cost Sensitivity": "交易成本变化对收益和换手的影响。",
+    "Structural Validation": "结构性验证：区分真实 alpha、伪 alpha 和无效信号。",
+    "OOS Metrics": "样本外指标；用于看模型离开训练区间后是否仍有效。",
+    "Stability": "稳定性检查；观察收益、IC 和夏普是否过度波动。",
+    "Real Alpha Criteria": "判断信号是否可能是真实 alpha 的条件清单。",
+    "Randomization": "随机化检验；通过打乱标签或特征验证结果是否只是巧合。",
+    "Market Regime Dashboard": "市场状态面板：观察趋势、波动、流动性和行为状态。",
+    "Regime History": "近期市场状态变化的时间条。",
+    "Current Regime Detail": "当前市场状态的细分指标。",
+    "Regime Validation": "市场状态识别是否连续、稳定、不过度跳变的检查。",
+    "Trend Strength": "趋势强度；越高表示上涨或下跌方向越清晰。",
+    "Volatility Curve": "波动率曲线；越高表示市场波动越大。",
+    "Liquidity Curve": "流动性曲线；越高表示成交和资金活跃度越好。",
+    "Recent Regime Changes": "最近发生市场状态切换的日期和状态。",
+    "Behavioral Flow Dashboard": "行为资金流面板：观察散户、机构、恐慌、追涨和拥挤度。",
+    "Crowding Heatmap": "拥挤度热力图；颜色越强表示交易拥挤或反转风险越高。",
+    "Behavior Detail": "行为层面的细分指标。",
+    "Behavior Validation": "行为模型是否只用当时可见数据、分数是否合理的检查。",
+    "Retail Pressure": "散户压力；偏高时说明短线情绪参与更强。",
+    "Institutional Flow": "机构流向；偏高时说明机构资金特征更强。",
+    "Panic Timeline": "恐慌时间线；偏高时说明避险或抛压情绪更强。",
+    "FOMO Timeline": "追涨情绪时间线；偏高时说明错失恐惧和追高倾向更强。",
+    "Flow-Price Divergence": "量价背离；资金行为和价格反应不一致时需要重点观察。",
+    "Market Structure Dashboard": "市场结构面板：把趋势、资金流、波动和噪声拆开看。",
+    "Return Decomposition": "收益结构分解；观察当前市场主要由什么因素驱动。",
+    "Structure State Timeline": "市场结构状态的近期变化。",
+    "Structure Detail": "结构模型的当前细分指标。",
+    "Structure Validation": "结构模型是否纯观察、是否不用未来收益标签的检查。",
+    "Dispersion Heatmap": "离散度热力图；看个股分化程度。",
+    "Correlation Network": "相关性走势；越高表示个股更同步，越低表示分化更强。",
+    "Structural Shock Events": "结构冲击事件；提示市场结构可能发生异常变化的日期。",
+    "Structural Anomaly Dashboard": "结构异常面板：观察系统性风险、结构断裂、流动性真空等异常。",
+    "Anomaly Timeline": "异常分数时间线；越高表示结构偏离常态越明显。",
+    "Shock Detection Heatmap": "冲击检测热力图；颜色越强表示异常冲击概率越高。",
+    "Anomaly State Timeline": "异常状态的近期变化。",
+    "Anomaly Detail": "异常模型的当前细分指标。",
+    "Anomaly Validation": "异常检测是否纯观察、是否不预测涨跌的检查。",
+    "Correlation Breakdown": "相关性断裂概率；偏高时说明市场内部联动关系变化明显。",
+    "Flow Shock Events": "资金流冲击事件；观察机构或散户流动是否出现异常。",
+    "Anomaly Events": "中高风险异常事件清单。",
+    "Column": "数据字段名。",
+    "Missing": "该字段缺失比例。",
+    "Code": "股票代码；后面的 Xueqiu 可打开雪球页面。",
+    "Close": "最近收盘价。",
+    "Revenue": "营业收入。",
+    "Net Profit": "净利润。",
+    "ROE": "净资产收益率，衡量公司赚钱效率。",
+    "PE": "市盈率，股价相对盈利的估值倍数。",
+    "PB": "市净率，股价相对净资产的估值倍数。",
+    "Market Cap": "总市值。",
+    "Check": "校验项。",
+    "Value": "该指标或校验项的当前值。",
+    "Growth": "成长因子，关注收入和利润增长。",
+    "Quality": "质量因子，关注盈利质量和财务稳健性。",
+    "Risk": "风险项或风险等级；数值越高通常表示风险越高。",
+    "Momentum": "动量因子，关注价格趋势延续性。",
+    "Metric": "指标名称。",
+    "Days": "观察周期天数。",
+    "IC": "信息系数，衡量因子分数与未来收益的相关性。",
+    "RankIC": "排序信息系数，衡量因子排序与未来收益排序的相关性。",
+    "Obs": "有效样本数量。",
+    "Score": "评分或概率数值。",
+    "Industry": "所属行业。",
+    "Debt": "负债率或债务压力指标。",
+    "Fail Reasons": "未通过筛选条件的原因。",
+    "Name": "基准或项目名称。",
+    "Annual": "年化收益率。",
+    "Excess": "相对基准的超额收益。",
+    "Beta": "相对市场波动的敏感度。",
+    "Drawdown": "最大回撤，表示从高点下跌的幅度。",
+    "Weight": "组合中的模拟权重。",
+    "Rebalance Date": "最近一次模拟调仓日期。",
+    "Factor": "因子名称。",
+    "Baseline": "优化前的基准模型。",
+    "Optimized": "优化后的模型。",
+    "Horizon": "预测或评估周期。",
+    "Baseline RankIC": "优化前的排序信息系数。",
+    "Optimized RankIC": "优化后的排序信息系数。",
+    "Delta": "优化后相对优化前的变化量。",
+    "Setting": "参数设置。",
+    "Cost": "交易成本假设。",
+    "Sharpe": "夏普比率，单位风险对应的收益。",
+    "Turnover": "换手率，越高表示交易越频繁。",
+    "Criterion": "判断条件。",
+    "Test": "测试方法。",
+    "Mean": "平均值。",
+    "P95": "95 分位值，表示较高但非极端的水平。",
+    "P Value": "显著性概率，越低通常越不像随机结果。",
+    "Significant": "是否通过显著性判断。",
+    "Date": "日期。",
+    "Trend": "趋势状态。",
+    "Volatility": "波动状态或波动率。",
+    "Liquidity": "流动性状态。",
+    "Behavior": "行为状态。",
+    "Divergence": "背离类型。",
+    "Actor": "主导资金类型。",
+    "Overlay": "行为叠加状态。",
+    "Type": "事件类型。",
+    "Probability": "事件概率。",
+    "State": "当前状态。",
+    "Flow": "资金流冲击概率。",
+    "Inst": "机构资金相关指标。",
+    "Retail": "散户资金或情绪相关指标。",
+    "annual_return": "年化收益率；把区间收益换算成年维度。",
+    "sharpe": "夏普比率；越高表示承担同样波动获得的收益越好。",
+    "max_drawdown": "最大回撤；越低越好，表示历史最大亏损幅度。",
+    "volatility": "收益波动率；越高说明净值波动越大。",
+    "win_rate": "胜率；上涨或盈利周期占比。",
+    "turnover_rate": "换手率；越高说明组合交易越频繁。",
+    "total_transaction_cost": "累计交易成本。",
+    "future_leak_rows": "未来函数问题行数；应为 0。",
+    "nan_cells": "空值单元格数量；越少越好。",
+    "score_std": "评分标准差；太低说明打分区分度不足。",
+    "score_min": "最低评分。",
+    "score_max": "最高评分。",
+    "rank_ic_gt_0_05": "RankIC 是否大于 0.05，用于判断排序信号是否有一定解释力。",
+    "positive_sharpe": "夏普是否为正。",
+    "stable_oos": "样本外表现是否稳定。",
+    "uses_future_return_labels": "是否使用未来收益标签；应为 False。",
+    "uses_alpha_model": "是否调用 alpha 模型；异常检测应为 False。",
+    "predicts_market_direction": "是否直接预测市场方向；本页异常检测不做方向预测。",
+    "purely_observational": "是否纯观察指标，不直接生成买卖指令。",
+    "all_scores_bounded_0_1": "所有概率或分数是否限制在 0 到 1。",
+    "anomaly_event_frequency": "异常事件出现频率。",
+    "high_risk_frequency": "高风险状态出现频率。",
+    "recent_30d_mean_anomaly": "最近 30 个交易日平均异常分数。",
+}
+
+
 def _stock_code_link(value: Any) -> str:
     code = str(value or "").strip()
     escaped_code = html.escape(code)
@@ -1068,6 +1225,27 @@ def _xueqiu_symbol(code: str) -> str | None:
     if exchange not in {"SH", "SZ", "BJ"} or not ticker.isdigit():
         return None
     return f"{exchange}{ticker}"
+
+
+def _annotate_help(content: str) -> str:
+    for label in sorted(HELP_TEXT, key=len, reverse=True):
+        escaped_label = html.escape(str(label))
+        helped_label = _help_label(label)
+        for tag in ("h1", "h2", "th"):
+            content = content.replace(f"<{tag}>{escaped_label}</{tag}>", f"<{tag}>{helped_label}</{tag}>")
+        content = content.replace(f"<span>{escaped_label}</span>", f"<span>{helped_label}</span>")
+        content = content.replace(f"<td>{escaped_label}</td>", f"<td>{helped_label}</td>")
+    return content
+
+
+def _help_label(label: Any) -> str:
+    text = str(label)
+    escaped_text = html.escape(text)
+    help_text = HELP_TEXT.get(text)
+    if not help_text:
+        return escaped_text
+    escaped_help = html.escape(help_text, quote=True)
+    return f'<span class="help" title="{escaped_help}" aria-label="{escaped_help}">{escaped_text}</span>'
 
 
 def _sparkline_svg(rows: list[dict[str, Any]], key: str, color: str) -> str:
@@ -1203,6 +1381,7 @@ def _anomaly_strip(rows: list[dict[str, Any]]) -> str:
 
 
 def _page(content: str) -> str:
+    content = _annotate_help(content)
     return f"""
     <!doctype html>
     <html lang="en">
@@ -1244,6 +1423,11 @@ def _page(content: str) -> str:
         h1 {{ font-size: 30px; line-height: 1.1; }}
         h2 {{ font-size: 18px; margin: 24px 0 10px; }}
         p, .stamp {{ color: var(--muted); }}
+        .help {{
+          cursor: help;
+          text-decoration: underline dotted rgba(15, 118, 110, 0.55);
+          text-underline-offset: 3px;
+        }}
         .metrics {{
           display: grid;
           grid-template-columns: repeat(4, minmax(0, 1fr));

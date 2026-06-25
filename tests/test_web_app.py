@@ -29,3 +29,25 @@ def test_stock_code_link_opens_xueqiu_in_new_window() -> None:
     assert 'target="_blank"' in linked
     assert 'rel="noopener noreferrer"' in linked
     assert ">Xueqiu</a>" in linked
+
+
+def test_page_adds_chinese_hover_explanations() -> None:
+    page = _page(
+        """
+        <main class="shell">
+          <h1>TenBagger</h1>
+          <section class="metrics"><div class="metric"><span>Stocks</span><strong>10</strong></div></section>
+          <h2>Missing Rates</h2>
+          <table>
+            <thead><tr><th>ROE</th><th>RankIC</th></tr></thead>
+            <tbody><tr><td>annual_return</td><td>0.1</td></tr></tbody>
+          </table>
+        </main>
+        """
+    )
+
+    assert 'class="help"' in page
+    assert "十倍股寻找系统" in page
+    assert 'title="字段缺失率；越低说明基础数据越完整。"' in page
+    assert 'title="净资产收益率，衡量公司赚钱效率。"' in page
+    assert 'title="年化收益率；把区间收益换算成年维度。"' in page
