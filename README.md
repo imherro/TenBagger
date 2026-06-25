@@ -13,6 +13,7 @@ Current milestones:
 - TASK 6: alpha monetization and execution optimization.
 - TASK 7: structural alpha validation and final alpha classification.
 - TASK 8: market regime and behavioral state engine.
+- TASK 9: market behavior and flow pressure engine.
 
 ## TASK 1 Scope
 
@@ -144,6 +145,18 @@ python scripts/run_task8.py
 TASK 8 writes market regime reports under `reports/` and daily regime data under
 `data/regime/`. It adds `GET /api/task8/regime` and a Market Regime Dashboard on
 the local web display.
+
+## Run TASK 9
+
+Run TASK 8 first, then:
+
+```powershell
+python scripts/run_task9.py
+```
+
+TASK 9 writes behavioral flow reports under `reports/` and daily behavior data
+under `data/behavior/`. It adds `GET /api/task9/behavior` and a Behavioral Flow
+Dashboard on the local web display.
 
 ## Tests
 

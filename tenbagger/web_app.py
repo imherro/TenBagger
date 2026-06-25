@@ -23,6 +23,7 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
     monetization_report_path = Path(report_dir) / "task6_monetization_summary.json"
     structural_report_path = Path(report_dir) / "task7_structural_validation_summary.json"
     regime_report_path = Path(report_dir) / "task8_regime_summary.json"
+    behavior_report_path = Path(report_dir) / "task9_behavior_summary.json"
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -82,6 +83,18 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
         status = 200 if report else 404
         return JSONResponse(report.get("api_response", {}) if report else {"error": "TASK 8 report not found"}, status_code=status)
 
+    @app.get("/api/task9")
+    def task9_api() -> JSONResponse:
+        report = _load_report(behavior_report_path)
+        status = 200 if report else 404
+        return JSONResponse(report or {"error": "TASK 9 report not found"}, status_code=status)
+
+    @app.get("/api/task9/behavior")
+    def task9_behavior_api() -> JSONResponse:
+        report = _load_report(behavior_report_path)
+        status = 200 if report else 404
+        return JSONResponse(report.get("api_response", {}) if report else {"error": "TASK 9 report not found"}, status_code=status)
+
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
         report = _load_report(report_path)
@@ -92,6 +105,7 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
         monetization_report = _load_report(monetization_report_path)
         structural_report = _load_report(structural_report_path)
         regime_report = _load_report(regime_report_path)
+        behavior_report = _load_report(behavior_report_path)
         return _render_dashboard(
             report,
             factor_report,
@@ -101,6 +115,7 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
             monetization_report,
             structural_report,
             regime_report,
+            behavior_report,
         )
 
     return app
@@ -124,6 +139,7 @@ def _render_dashboard(
     monetization_report: dict[str, Any] | None,
     structural_report: dict[str, Any] | None,
     regime_report: dict[str, Any] | None,
+    behavior_report: dict[str, Any] | None,
 ) -> str:
     if report is None:
         content = """
@@ -175,6 +191,7 @@ def _render_dashboard(
     monetization_section = _render_monetization_section(monetization_report)
     structural_section = _render_structural_section(structural_report)
     regime_section = _render_regime_section(regime_report)
+    behavior_section = _render_behavior_section(behavior_report)
 
     content = f"""
     <main class="shell">
@@ -207,6 +224,7 @@ def _render_dashboard(
       {monetization_section}
       {structural_section}
       {regime_section}
+      {behavior_section}
     </main>
     """
     return _page(content)
@@ -636,6 +654,120 @@ def _render_regime_section(report: dict[str, Any] | None) -> str:
     """
 
 
+def _render_behavior_section(report: dict[str, Any] | None) -> str:
+    if report is None:
+        return """
+        <section>
+          <h2>Behavioral Flow Dashboard</h2>
+          <table><tbody><tr><td>TASK 9 report not found</td></tr></tbody></table>
+        </section>
+        """
+
+    latest = report.get("latest", {})
+    api = report.get("api_response", {})
+    validation = report.get("validation", {})
+    history = report.get("history", {})
+    chart_tail = history.get("chart_tail", [])
+    divergence_events = history.get("divergence_events", [])
+
+    metric_cards = [
+        ("Actor", latest.get("dominant_actor")),
+        ("Crowding", api.get("crowding_level")),
+        ("Divergence", api.get("flow_price_divergence")),
+        ("Overlay", api.get("behavior_overlay_state")),
+    ]
+    cards_html = "\n".join(
+        f"<div class='metric'><span>{html.escape(str(label))}</span><strong>{html.escape(str(value))}</strong></div>"
+        for label, value in metric_cards
+    )
+    detail_html = "\n".join(
+        f"<tr><td>{html.escape(str(key))}</td><td>{html.escape(_fmt(latest.get(key)))}</td></tr>"
+        for key in [
+            "date",
+            "retail_pressure_index",
+            "institutional_flow_index",
+            "panic_index",
+            "fomo_index",
+            "positioning_crowdedness",
+            "reversal_risk",
+            "joint_regime_behavior",
+        ]
+    )
+    validation_html = "\n".join(
+        f"<tr><td>{html.escape(str(key))}</td><td>{html.escape(_fmt(validation.get(key)))}</td></tr>"
+        for key in [
+            "uses_future_return_labels",
+            "uses_factor_alpha",
+            "all_scores_bounded_0_1",
+            "overlay_autocorrelation",
+            "behavior_transition_frequency",
+            "divergence_event_frequency",
+            "recent_30d_mean_panic",
+            "recent_30d_mean_fomo",
+        ]
+    )
+    event_html = "\n".join(
+        "<tr><td>{date}</td><td>{flow_price_divergence}</td><td>{divergence_score}</td><td>{dominant_actor}</td><td>{behavior_overlay_state}</td></tr>".format(
+            **{key: html.escape(str(row.get(key, ""))) for key in ["date", "flow_price_divergence", "divergence_score", "dominant_actor", "behavior_overlay_state"]}
+        )
+        for row in divergence_events[-10:]
+    )
+    if not event_html:
+        event_html = "<tr><td colspan='5'>No recent flow-price divergence events</td></tr>"
+
+    retail_chart = _sparkline_svg(chart_tail, "retail_pressure_index", "#b45309")
+    institutional_chart = _sparkline_svg(chart_tail, "institutional_flow_index", "#0f766e")
+    panic_chart = _sparkline_svg(chart_tail, "panic_index", "#be123c")
+    fomo_chart = _sparkline_svg(chart_tail, "fomo_index", "#1d4ed8")
+    crowding_heatmap = _crowding_heatmap(chart_tail)
+
+    return f"""
+    <section>
+      <h2>Behavioral Flow Dashboard</h2>
+      <p>Market actors and behavior pressure. Source: {html.escape(str(report.get("source", {}).get("source")))}</p>
+    </section>
+    <section class="metrics">{cards_html}</section>
+    <section>
+      <h2>Crowding Heatmap</h2>
+      {crowding_heatmap}
+    </section>
+    <section class="grid">
+      <div>
+        <h2>Behavior Detail</h2>
+        <table><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>{detail_html}</tbody></table>
+      </div>
+      <div>
+        <h2>Behavior Validation</h2>
+        <table><thead><tr><th>Check</th><th>Value</th></tr></thead><tbody>{validation_html}</tbody></table>
+      </div>
+    </section>
+    <section class="grid">
+      <div>
+        <h2>Retail Pressure</h2>
+        {retail_chart}
+      </div>
+      <div>
+        <h2>Institutional Flow</h2>
+        {institutional_chart}
+      </div>
+    </section>
+    <section class="grid">
+      <div>
+        <h2>Panic Timeline</h2>
+        {panic_chart}
+      </div>
+      <div>
+        <h2>FOMO Timeline</h2>
+        {fomo_chart}
+      </div>
+    </section>
+    <section>
+      <h2>Flow-Price Divergence</h2>
+      <table><thead><tr><th>Date</th><th>Divergence</th><th>Score</th><th>Actor</th><th>Overlay</th></tr></thead><tbody>{event_html}</tbody></table>
+    </section>
+    """
+
+
 def _fmt(value: Any) -> str:
     if isinstance(value, float):
         return f"{value:.4f}"
@@ -680,6 +812,26 @@ def _regime_strip(rows: list[dict[str, Any]]) -> str:
         date = html.escape(str(row.get("date", "")))
         cells.append(
             f"<span title='{date} {html.escape(state)}' style='background:{colors.get(state, '#64748b')}'></span>"
+        )
+    return f"<div class='regime-strip'>{''.join(cells)}</div>"
+
+
+def _crowding_heatmap(rows: list[dict[str, Any]]) -> str:
+    if not rows:
+        return "<div class='regime-strip empty'>Not enough data</div>"
+    colors = {
+        "low": "#d9f99d",
+        "medium": "#fde68a",
+        "high": "#fb923c",
+        "extreme": "#be123c",
+    }
+    cells = []
+    for row in rows[-90:]:
+        level = str(row.get("crowding_level", "low"))
+        score = html.escape(_fmt(row.get("positioning_crowdedness")))
+        date = html.escape(str(row.get("date", "")))
+        cells.append(
+            f"<span title='{date} {html.escape(level)} {score}' style='background:{colors.get(level, '#fde68a')}'></span>"
         )
     return f"<div class='regime-strip'>{''.join(cells)}</div>"
 
