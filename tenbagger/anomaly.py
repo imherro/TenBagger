@@ -203,7 +203,7 @@ def load_or_build_structure_daily(
     universe_level: str = "dev",
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     data_path = Path(data_dir)
-    structure_path = data_path / "structure" / "market_structure_daily.parquet"
+    structure_path = data_path / "structure" / f"market_structure_daily_{universe_level}.parquet"
     if structure_path.exists():
         return pd.read_parquet(structure_path), {
             "source": "task10_market_structure_daily",

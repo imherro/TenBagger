@@ -21,6 +21,7 @@ def run_task10(
 
     data_path = Path(data_dir) / "structure"
     data_path.mkdir(parents=True, exist_ok=True)
+    result.daily.to_parquet(data_path / f"market_structure_daily_{universe_level}.parquet", index=False)
     result.daily.to_parquet(data_path / "market_structure_daily.parquet", index=False)
 
     report_path = Path(report_dir)

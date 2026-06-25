@@ -204,6 +204,21 @@ TASK 11 writes anomaly reports under `reports/` and daily anomaly data under
 `data/anomaly/`. It adds `GET /api/task11/anomaly` and a Structural Anomaly
 Dashboard on the local web display.
 
+## Run TASK U2 Re-evaluation
+
+After generating task reports for at least two universe levels, compare them:
+
+```powershell
+python scripts/run_universe_revaluation.py --baseline dev --target research
+```
+
+The re-evaluation reads existing reports only. It does not optimize weights,
+change factor definitions, or tune alpha. It writes:
+
+- `reports/universe_revaluation_summary.json`
+- `reports/TASK_U2_REEVALUATION.md`
+- `GET /api/universe/revaluation`
+
 ## Tests
 
 ```powershell

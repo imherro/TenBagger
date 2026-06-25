@@ -218,7 +218,7 @@ def load_or_build_regime_daily(
     universe_level: str = "dev",
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     data_path = Path(data_dir)
-    regime_path = data_path / "regime" / "market_regime_daily.parquet"
+    regime_path = data_path / "regime" / f"market_regime_daily_{universe_level}.parquet"
     if regime_path.exists():
         return pd.read_parquet(regime_path), {
             "source": "task8_market_regime_daily",

@@ -21,6 +21,7 @@ def run_task11(
 
     data_path = Path(data_dir) / "anomaly"
     data_path.mkdir(parents=True, exist_ok=True)
+    result.daily.to_parquet(data_path / f"market_anomaly_daily_{universe_level}.parquet", index=False)
     result.daily.to_parquet(data_path / "market_anomaly_daily.parquet", index=False)
 
     report_path = Path(report_dir)

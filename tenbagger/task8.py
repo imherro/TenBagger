@@ -27,6 +27,7 @@ def run_task8(
 
     data_path = Path(data_dir) / "regime"
     data_path.mkdir(parents=True, exist_ok=True)
+    result.daily.to_parquet(data_path / f"market_regime_daily_{universe_level}.parquet", index=False)
     result.daily.to_parquet(data_path / "market_regime_daily.parquet", index=False)
 
     report_path = Path(report_dir)

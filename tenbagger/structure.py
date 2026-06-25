@@ -219,7 +219,7 @@ def load_or_build_behavior_daily(
     universe_level: str = "dev",
 ) -> tuple[pd.DataFrame, dict[str, Any]]:
     data_path = Path(data_dir)
-    behavior_path = data_path / "behavior" / "market_behavior_daily.parquet"
+    behavior_path = data_path / "behavior" / f"market_behavior_daily_{universe_level}.parquet"
     if behavior_path.exists():
         return pd.read_parquet(behavior_path), {
             "source": "task9_market_behavior_daily",

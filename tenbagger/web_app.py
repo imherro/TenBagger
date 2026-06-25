@@ -14,6 +14,7 @@ from fastapi import FastAPI
 from fastapi.responses import HTMLResponse, JSONResponse
 
 from tenbagger.config import DEFAULT_REPORT_DIR
+from tenbagger.revaluation import run_universe_revaluation
 from tenbagger.universe import UniverseManager
 
 
@@ -48,6 +49,19 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
         except Exception as exc:
             return JSONResponse({"error": str(exc)}, status_code=400)
         return JSONResponse(details)
+
+    @app.get("/api/universe/revaluation")
+    def universe_revaluation_api(baseline: str = "dev", target: str = "research") -> JSONResponse:
+        try:
+            result = run_universe_revaluation(
+                report_root=Path(report_dir),
+                output_dir=Path(report_dir),
+                baseline_level=baseline,
+                target_level=target,
+            )
+        except Exception as exc:
+            return JSONResponse({"error": str(exc)}, status_code=400)
+        return JSONResponse(result)
 
     @app.get("/api/task2")
     def task2_api() -> JSONResponse:
