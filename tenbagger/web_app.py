@@ -24,6 +24,7 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
     structural_report_path = Path(report_dir) / "task7_structural_validation_summary.json"
     regime_report_path = Path(report_dir) / "task8_regime_summary.json"
     behavior_report_path = Path(report_dir) / "task9_behavior_summary.json"
+    structure_report_path = Path(report_dir) / "task10_structure_summary.json"
 
     @app.get("/health")
     def health() -> dict[str, str]:
@@ -95,6 +96,18 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
         status = 200 if report else 404
         return JSONResponse(report.get("api_response", {}) if report else {"error": "TASK 9 report not found"}, status_code=status)
 
+    @app.get("/api/task10")
+    def task10_api() -> JSONResponse:
+        report = _load_report(structure_report_path)
+        status = 200 if report else 404
+        return JSONResponse(report or {"error": "TASK 10 report not found"}, status_code=status)
+
+    @app.get("/api/task10/structure")
+    def task10_structure_api() -> JSONResponse:
+        report = _load_report(structure_report_path)
+        status = 200 if report else 404
+        return JSONResponse(report.get("api_response", {}) if report else {"error": "TASK 10 report not found"}, status_code=status)
+
     @app.get("/", response_class=HTMLResponse)
     def index() -> str:
         report = _load_report(report_path)
@@ -106,6 +119,7 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
         structural_report = _load_report(structural_report_path)
         regime_report = _load_report(regime_report_path)
         behavior_report = _load_report(behavior_report_path)
+        structure_report = _load_report(structure_report_path)
         return _render_dashboard(
             report,
             factor_report,
@@ -116,6 +130,7 @@ def create_app(report_dir: Path | str = DEFAULT_REPORT_DIR) -> FastAPI:
             structural_report,
             regime_report,
             behavior_report,
+            structure_report,
         )
 
     return app
@@ -140,6 +155,7 @@ def _render_dashboard(
     structural_report: dict[str, Any] | None,
     regime_report: dict[str, Any] | None,
     behavior_report: dict[str, Any] | None,
+    structure_report: dict[str, Any] | None,
 ) -> str:
     if report is None:
         content = """
@@ -192,6 +208,7 @@ def _render_dashboard(
     structural_section = _render_structural_section(structural_report)
     regime_section = _render_regime_section(regime_report)
     behavior_section = _render_behavior_section(behavior_report)
+    structure_section = _render_structure_section(structure_report)
 
     content = f"""
     <main class="shell">
@@ -225,6 +242,7 @@ def _render_dashboard(
       {structural_section}
       {regime_section}
       {behavior_section}
+      {structure_section}
     </main>
     """
     return _page(content)
@@ -768,6 +786,113 @@ def _render_behavior_section(report: dict[str, Any] | None) -> str:
     """
 
 
+def _render_structure_section(report: dict[str, Any] | None) -> str:
+    if report is None:
+        return """
+        <section>
+          <h2>Market Structure Dashboard</h2>
+          <table><tbody><tr><td>TASK 10 report not found</td></tr></tbody></table>
+        </section>
+        """
+
+    latest = report.get("latest", {})
+    api = report.get("api_response", {})
+    validation = report.get("validation", {})
+    history = report.get("history", {})
+    chart_tail = history.get("chart_tail", [])
+    shocks = history.get("structural_shocks", [])
+
+    metric_cards = [
+        ("Structure", api.get("structure_state")),
+        ("Correlation", api.get("correlation_regime")),
+        ("Dispersion", _fmt(api.get("market_dispersion"))),
+        ("Shock", _fmt(api.get("structural_shock_probability"))),
+    ]
+    cards_html = "\n".join(
+        f"<div class='metric'><span>{html.escape(str(label))}</span><strong>{html.escape(str(value))}</strong></div>"
+        for label, value in metric_cards
+    )
+    detail_html = "\n".join(
+        f"<tr><td>{html.escape(str(key))}</td><td>{html.escape(_fmt(latest.get(key)))}</td></tr>"
+        for key in [
+            "date",
+            "trend_component",
+            "flow_component",
+            "volatility_component",
+            "noise_component",
+            "cross_sectional_correlation",
+            "structural_shock_type",
+            "regime_behavior_structure",
+        ]
+    )
+    validation_html = "\n".join(
+        f"<tr><td>{html.escape(str(key))}</td><td>{html.escape(_fmt(validation.get(key)))}</td></tr>"
+        for key in [
+            "uses_future_return_labels",
+            "uses_alpha_factors",
+            "purely_observational",
+            "components_sum_to_one",
+            "all_scores_bounded_0_1",
+            "structure_autocorrelation",
+            "structure_transition_frequency",
+            "shock_event_frequency",
+        ]
+    )
+    shock_html = "\n".join(
+        "<tr><td>{date}</td><td>{structural_shock_type}</td><td>{structural_shock_probability}</td><td>{structure_state}</td></tr>".format(
+            **{key: html.escape(str(row.get(key, ""))) for key in ["date", "structural_shock_type", "structural_shock_probability", "structure_state"]}
+        )
+        for row in shocks[-10:]
+    )
+    if not shock_html:
+        shock_html = "<tr><td colspan='4'>No recent structural shock events</td></tr>"
+
+    decomposition = _decomposition_bars(latest)
+    dispersion_heatmap = _value_heatmap(chart_tail, "market_dispersion", "#dbeafe", "#1d4ed8")
+    correlation_chart = _sparkline_svg(chart_tail, "cross_sectional_correlation", "#7c3aed")
+    structure_timeline = _structure_strip(chart_tail)
+
+    return f"""
+    <section>
+      <h2>Market Structure Dashboard</h2>
+      <p>Structure decomposition across trend, flow, volatility, and noise. Source: {html.escape(str(report.get("source", {}).get("source")))}</p>
+    </section>
+    <section class="metrics">{cards_html}</section>
+    <section>
+      <h2>Return Decomposition</h2>
+      {decomposition}
+    </section>
+    <section>
+      <h2>Structure State Timeline</h2>
+      {structure_timeline}
+    </section>
+    <section class="grid">
+      <div>
+        <h2>Structure Detail</h2>
+        <table><thead><tr><th>Metric</th><th>Value</th></tr></thead><tbody>{detail_html}</tbody></table>
+      </div>
+      <div>
+        <h2>Structure Validation</h2>
+        <table><thead><tr><th>Check</th><th>Value</th></tr></thead><tbody>{validation_html}</tbody></table>
+      </div>
+    </section>
+    <section class="grid">
+      <div>
+        <h2>Dispersion Heatmap</h2>
+        {dispersion_heatmap}
+      </div>
+      <div>
+        <h2>Correlation Network</h2>
+        {correlation_chart}
+      </div>
+    </section>
+    <section>
+      <h2>Structural Shock Events</h2>
+      <table><thead><tr><th>Date</th><th>Type</th><th>Probability</th><th>State</th></tr></thead><tbody>{shock_html}</tbody></table>
+    </section>
+    """
+
+
 def _fmt(value: Any) -> str:
     if isinstance(value, float):
         return f"{value:.4f}"
@@ -832,6 +957,57 @@ def _crowding_heatmap(rows: list[dict[str, Any]]) -> str:
         date = html.escape(str(row.get("date", "")))
         cells.append(
             f"<span title='{date} {html.escape(level)} {score}' style='background:{colors.get(level, '#fde68a')}'></span>"
+        )
+    return f"<div class='regime-strip'>{''.join(cells)}</div>"
+
+
+def _decomposition_bars(latest: dict[str, Any]) -> str:
+    parts = [
+        ("Trend", latest.get("trend_component"), "#0f766e"),
+        ("Flow", latest.get("flow_component"), "#1d4ed8"),
+        ("Volatility", latest.get("volatility_component"), "#be123c"),
+        ("Noise", latest.get("noise_component"), "#64748b"),
+    ]
+    rows = []
+    for label, value, color in parts:
+        score = float(value or 0.0)
+        rows.append(
+            f"<div class='bar-row'><span>{html.escape(label)}</span><div><i style='width:{score * 100:.1f}%;background:{color}'></i></div><b>{score:.3f}</b></div>"
+        )
+    return f"<div class='bars'>{''.join(rows)}</div>"
+
+
+def _value_heatmap(rows: list[dict[str, Any]], key: str, low_color: str, high_color: str) -> str:
+    if not rows:
+        return "<div class='regime-strip empty'>Not enough data</div>"
+    cells = []
+    for row in rows[-90:]:
+        value = max(0.0, min(1.0, float(row.get(key) or 0.0)))
+        alpha = 0.25 + value * 0.75
+        date = html.escape(str(row.get("date", "")))
+        cells.append(
+            f"<span title='{date} {_fmt(value)}' style='background:{high_color};opacity:{alpha:.2f}'></span>"
+        )
+    return f"<div class='regime-strip'>{''.join(cells)}</div>"
+
+
+def _structure_strip(rows: list[dict[str, Any]]) -> str:
+    if not rows:
+        return "<div class='regime-strip empty'>Not enough data</div>"
+    colors = {
+        "balanced_structure": "#0f766e",
+        "systemic_stress": "#be123c",
+        "fragmented_dispersion": "#b45309",
+        "flow_led_accumulation": "#1d4ed8",
+        "noisy_transition": "#64748b",
+        "trend_flow_aligned": "#7c3aed",
+    }
+    cells = []
+    for row in rows[-90:]:
+        state = str(row.get("structure_state", "balanced_structure"))
+        date = html.escape(str(row.get("date", "")))
+        cells.append(
+            f"<span title='{date} {html.escape(state)}' style='background:{colors.get(state, '#64748b')}'></span>"
         )
     return f"<div class='regime-strip'>{''.join(cells)}</div>"
 
@@ -956,6 +1132,30 @@ def _page(content: str) -> str:
           display: block;
           min-height: 26px;
           border-radius: 3px;
+        }}
+        .bars {{
+          background: var(--panel);
+          border: 1px solid var(--line);
+          border-radius: 8px;
+          padding: 14px;
+        }}
+        .bar-row {{
+          display: grid;
+          grid-template-columns: 110px 1fr 64px;
+          align-items: center;
+          gap: 10px;
+          margin: 10px 0;
+          font-size: 13px;
+        }}
+        .bar-row div {{
+          height: 14px;
+          background: #e5e7eb;
+          border-radius: 999px;
+          overflow: hidden;
+        }}
+        .bar-row i {{
+          display: block;
+          height: 100%;
         }}
         @media (max-width: 860px) {{
           .shell {{ padding: 18px; }}

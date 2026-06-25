@@ -14,6 +14,7 @@ Current milestones:
 - TASK 7: structural alpha validation and final alpha classification.
 - TASK 8: market regime and behavioral state engine.
 - TASK 9: market behavior and flow pressure engine.
+- TASK 10: market structure decomposition engine.
 
 ## TASK 1 Scope
 
@@ -157,6 +158,18 @@ python scripts/run_task9.py
 TASK 9 writes behavioral flow reports under `reports/` and daily behavior data
 under `data/behavior/`. It adds `GET /api/task9/behavior` and a Behavioral Flow
 Dashboard on the local web display.
+
+## Run TASK 10
+
+Run TASK 9 first, then:
+
+```powershell
+python scripts/run_task10.py
+```
+
+TASK 10 writes market structure reports under `reports/` and daily structure
+data under `data/structure/`. It adds `GET /api/task10/structure` and a Market
+Structure Dashboard on the local web display.
 
 ## Tests
 
